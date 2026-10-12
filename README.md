@@ -42,19 +42,15 @@ Arc Lock is built entirely on Apple's **Screen Time API** — three frameworks t
 | **DeviceActivity** | Waking Arc Lock up in the background: when a schedule starts or ends, when a limit's usage passes a threshold, and at midnight — even if Arc Lock hasn't been opened for days. |
 
 ```mermaid
-flowchart LR
-    subgraph App["Arc Lock app"]
-        UI["SwiftUI screens"] --> Model["AppModel<br/>(lock policy)"]
-    end
-    Model -- "rules (JSON)" --> Group[("App Group<br/>storage")]
-    Model -- "startMonitoring" --> DA["DeviceActivity<br/>(iOS)"]
-    DA -- "interval start/end,<br/>threshold reached" --> Monitor["Monitor extension"]
-    Monitor <-- "rules, usage marks" --> Group
-    Monitor -- "apply / clear" --> MS[("ManagedSettings<br/>one store per rule")]
-    Model -- "reconcile" --> MS
-    MS -- "shields apps & sites" --> Shield["Block screen<br/>(ShieldConfiguration ext.)"]
-    Shield -- "reads who holds it" --> Group
-    Shield --> Action["ShieldAction ext.<br/>only button: Close"]
+flowchart TD
+    You(["You"]) -->|"create a block"| App["Arc Lock app<br/>(lock policy)"]
+    App -->|"saves rules"| Store[("Shared storage<br/>on this iPhone")]
+    App -->|"asks iOS to watch<br/>times and usage"| DA["iOS DeviceActivity"]
+    DA -->|"block starts · ends<br/>limit reached · midnight"| Mon["Monitor extension<br/>(runs in the background)"]
+    Store <--> Mon
+    Mon -->|"apply / lift"| MS[("ManagedSettings<br/>one store per block")]
+    App -->|"re-checks on open"| MS
+    MS -->|"covers blocked apps & sites"| Shield["Block screen<br/>one button: Close"]
 ```
 
 ### Four parts
