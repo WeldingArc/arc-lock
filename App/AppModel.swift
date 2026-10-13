@@ -182,7 +182,8 @@ final class AppModel: ObservableObject {
         // re-check when a block, a session or a lock-in has just ended, or a pending change is due
         let ended = before.contains { $0 <= now }
         let due = state.rules.contains { $0.pending.map { effectiveDate($0) <= now } ?? false }
-        if ended || due || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
+        let protectionDue = state.deletionProtectionOffAt.map { $0 <= now } ?? false
+        if ended || due || protectionDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
     private func commit(_ change: (inout ArcState) -> Void) {
@@ -217,6 +218,23 @@ final class AppModel: ObservableObject {
     func finishOnboarding() { commit { $0.onboarded = true } }
 
     func setHeadsUp(_ on: Bool) { commit { $0.headsUp = on } }
+
+    // MARK: deletion protection
+
+    /// Switching on applies now; switching off waits for midnight (and for a lock-in to end), like any looser change.
+    func setDeletionProtection(_ on: Bool) -> Outcome {
+        if !demo { now = Date() }
+        if on {
+            commit { $0.deletionProtection = true; $0.deletionProtectionOffAt = nil }
+            return .saved
+        }
+        if lockInActive, let until = state.lockInUntil {
+            return .refused(Self.lockedMessage(until: until, reason: .lockIn, now: now))
+        }
+        let at = ScheduleMath.startOfNextDay(after: now, calendar: calendar)
+        commit { $0.deletionProtectionOffAt = at }
+        return .scheduled(at)
+    }
 
     // MARK: rules
 

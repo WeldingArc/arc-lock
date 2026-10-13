@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var editing: EditorTarget?
     @State private var showBlockNow = false
     @State private var showSettings = false
+    @State private var showLockIn = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -22,13 +23,13 @@ struct HomeView: View {
                 header
                 StatusHero()
                 sessionArea
-                if model.lockInActive, let until = model.state.lockInUntil { LockInBanner(until: until) }
+                lockInArea
                 section(title: "Schedules", kind: .schedule, rules: model.schedules,
                         empty: "Pick apps and websites and the hours they stay locked.")
                 section(title: "Daily limits", kind: .limit, rules: model.limits,
                         empty: "After the time you allow each day, apps lock until midnight.")
                     .id("limits")
-                Text("While a block runs it can't be changed or stopped, and no app can be deleted. While any block is switched on, the clock stays automatic.")
+                Text("While a block runs it can't be changed or stopped. With deletion protection on, no app can be deleted.")
                     .font(.p(13, .regular, .footnote))
                     .foregroundStyle(Palette.faint)
                     .multilineTextAlignment(.center)
@@ -46,13 +47,15 @@ struct HomeView: View {
         .sheet(item: $editing) { target in RuleEditor(target: target).environmentObject(model) }
         .sheet(isPresented: $showBlockNow) { BlockNowSheet().environmentObject(model) }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(model) }
+        .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
         #if DEBUG
         .onAppear {
             switch Demo.shot {
             case "editor": editing = .edit(Demo.study)
             case "limit": editing = .edit(Demo.social)
             case "blocknow": showBlockNow = true
-            case "settings", "lockin", "guide": showSettings = true
+            case "settings", "guide": showSettings = true
+            case "lockin": showLockIn = true
             default: break
             }
         }
@@ -94,6 +97,27 @@ struct HomeView: View {
             }
             .buttonStyle(BrassButton())
             .padding(.horizontal, 24)
+        }
+    }
+
+    @ViewBuilder private var lockInArea: some View {
+        if model.lockInActive, let until = model.state.lockInUntil {
+            Button { showLockIn = true } label: { LockInBanner(until: until) }.buttonStyle(.plain)
+        } else {
+            Button { showLockIn = true } label: {
+                Card {
+                    HStack(spacing: 14) {
+                        Image(systemName: "lock.shield").font(.system(size: 22, weight: .light)).foregroundStyle(Palette.brass)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Lock in").font(.p(17, .regular)).foregroundStyle(Palette.ink)
+                            Text("Freeze every rule for days. No early exit.").font(.p(14, .regular)).foregroundStyle(Palette.muted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(Palette.faint)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 

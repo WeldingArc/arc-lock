@@ -31,6 +31,9 @@ struct ArcState: Codable, Equatable {
     var lastSessionMinutes = 60
     var headsUp = true
     var onboarded = false
+    /// No app (Arc Lock included) can be deleted while this is on. On by default; switching it off waits for midnight.
+    var deletionProtection = true
+    var deletionProtectionOffAt: Date?
     /// Rule id → store slot. iOS allows an app 50 named stores in total, so rules reuse a fixed pool of slots.
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
@@ -38,6 +41,7 @@ struct ArcState: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
+        case deletionProtection, deletionProtectionOffAt
     }
 
     init() {}
@@ -66,6 +70,8 @@ struct ArcState: Codable, Equatable {
         headsUp = (try? c.decode(Bool.self, forKey: .headsUp)) ?? true
         onboarded = (try? c.decode(Bool.self, forKey: .onboarded)) ?? false
         slots = (try? c.decode([String: Int].self, forKey: .slots)) ?? [:]
+        deletionProtection = (try? c.decode(Bool.self, forKey: .deletionProtection)) ?? true
+        deletionProtectionOffAt = try? c.decode(Date.self, forKey: .deletionProtectionOffAt)
     }
 }
 
@@ -196,6 +202,8 @@ enum Names {
     /// Keeps the clock automatic while any block is switched on, so it can't be set forward past a block or a
     /// change waiting for midnight.
     static let clockStore = ManagedSettingsStore.Name("clock")
+    /// Deletion protection (always-on, separate from blocks).
+    static let guardStore = ManagedSettingsStore.Name("guard")
 }
 
 extension FamilyActivitySelection {

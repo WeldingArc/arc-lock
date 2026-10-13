@@ -35,6 +35,10 @@ enum Shielding {
         if on { holdDevice(store) } else { store.clearAllSettings() }
     }
 
+    static func guardDeletion(_ on: Bool) {
+        ManagedSettingsStore(named: Names.guardStore).application.denyAppRemoval = on ? true : nil
+    }
+
     static func holdClock(_ on: Bool) {
         ManagedSettingsStore(named: Names.clockStore).dateAndTime.requireAutomaticDateAndTime = on ? true : nil
     }
@@ -201,6 +205,7 @@ enum Engine {
         let lockIn = (state.lockInUntil?.timeIntervalSince(now) ?? 0) > edge
         Shielding.setLockIn(lockIn)
         Shielding.holdClock(lockIn || sessionOn || state.rules.contains { $0.plan.isOn || $0.pending != nil })
+        Shielding.guardDeletion(state.onboarded && state.deletionProtection)
     }
 
     /// Whether a rule should shield at `now` (see `edge`).
@@ -222,12 +227,17 @@ enum Engine {
         var st = StateStore.load()
         func tidy(_ s: inout ArcState) -> Set<UUID> {
             if let l = s.lockInUntil, l <= now { s.lockInUntil = nil }
+            if let off = s.deletionProtectionOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now {
+                s.deletionProtection = false
+                s.deletionProtectionOffAt = nil
+            }
             if let sess = s.session, sess.endsAt <= now { s.session = nil }
             return Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil)
         }
         var probe = st
         let due = tidy(&probe)
-        guard !due.isEmpty || probe.session != st.session || probe.lockInUntil != st.lockInUntil else { return (st, false) }
+        guard !due.isEmpty || probe.session != st.session || probe.lockInUntil != st.lockInUntil
+              || probe.deletionProtection != st.deletionProtection else { return (st, false) }
         st = StateStore.update { fresh in
             let ids = tidy(&fresh)
             for id in ids {

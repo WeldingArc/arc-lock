@@ -29,6 +29,7 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
   - the date and time can't be changed by hand (they stay automatic as long as any block is switched on),
   - the block screen has exactly one button: **Close**.
 - **Daily limits are locked in for the day** — you can make a limit stricter once a day (what you've already used today keeps counting); more time, fewer apps, deleting it or a second change only take effect at midnight.
+- **Deletion protection** — on by default: no app can be deleted from the iPhone, Arc Lock included. Switching it off only takes effect at midnight.
 - **Lock-in** — freeze every rule for 1–30 days, even between blocks. No loosening, no deleting rules, no deleting apps — and changes you queued before it wait until it's over. No early exit.
 
 ## How it works
@@ -88,18 +89,6 @@ All of it lives in [`Core/ArcCore.swift`](Core/ArcCore.swift) — plain Swift wi
 | a schedule **between windows** | change anything — a schedule lasts at most 22 hours, and all schedules together must leave a free hour every day, so there's always such a time (and Arc Lock can always be opened, even if a block includes it) |
 
 "Stricter" is computed, not guessed: more apps, more days, fewer minutes, or a time window that covers the old one.
-
-## What it can't stop (honestly)
-
-Apple designs the Screen Time API so the iPhone's owner always keeps a way out:
-
-- **Switching off Arc Lock's Screen Time access** in Settings (Screen Time › Apps With Screen Time Access, or Settings › Apps › Arc Lock) removes every block at once. Arc Lock can't prevent that.
-  - **The fix:** on iOS 26.4 and later, a **Screen Time passcode** also protects that switch. Ask a friend to set one — and to enter *their own* Apple Account for passcode recovery. Don't skip recovery: a passcode nobody can recover may mean erasing the phone. Arc Lock walks you through this in **Settings › Make it harder to break**.
-  - Some iOS 26 versions still let Face ID flip the switch under Settings › Apps › Arc Lock — keep iOS up to date.
-- **Websites picked in Apple's picker** are shielded in Safari; add a site **by address** to block it in every browser. If a site still opens right after a block starts, close and reopen the browser.
-- **Erasing the iPhone** removes everything, of course.
-
-Arc Lock is a speed bump for impulses, not a prison. That's also why nothing in it is ever permanent: every block, limit and lock-in ends on its own.
 
 ## Privacy
 

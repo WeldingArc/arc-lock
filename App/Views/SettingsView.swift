@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showLockIn = false
     @State private var showGuide = false
 
     var body: some View {
@@ -12,21 +11,7 @@ struct SettingsView: View {
                 Backdrop()
                 ScrollView {
                     VStack(spacing: 18) {
-                        lockInCard
-                        Button { showGuide = true } label: {
-                            Card {
-                                HStack(spacing: 14) {
-                                    Image(systemName: "key.horizontal").font(.system(size: 20, weight: .light)).foregroundStyle(Palette.brass)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Make it harder to break").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                                        Text("Close the last way out, in iOS Settings").font(.p(14, .regular)).foregroundStyle(Palette.muted)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right").foregroundStyle(Palette.faint)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
+                        protectionCard
                         Card {
                             Toggle(isOn: Binding(get: { model.state.headsUp }, set: { model.setHeadsUp($0) })) {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -45,31 +30,42 @@ struct SettingsView: View {
             .navigationTitle(Text("Settings"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
             .sheet(isPresented: $showGuide) { HarderGuide() }
         }
         .presentationBackground(Palette.night)
         #if DEBUG
         .onAppear {
-            if Demo.shot == "lockin" { showLockIn = true }
             if Demo.shot == "guide" { showGuide = true }
         }
         #endif
     }
 
-    private var lockInCard: some View {
-        Card(glow: model.lockInActive) {
-            VStack(alignment: .leading, spacing: 12) {
-                Eyebrow("Lock-in", color: model.lockInActive ? Palette.brass : Palette.muted)
-                if model.lockInActive, let until = model.state.lockInUntil {
-                    Text("Locked in through \(Fmt.lastDay(endingAt: until))").font(.p(20, .light, .title3)).foregroundStyle(Palette.ink)
-                    Text("Until then no rule can be loosened or deleted and no app can be deleted from this iPhone. You can still add blocks.")
-                        .font(.p(14, .regular)).foregroundStyle(Palette.muted)
-                    Button("Make it longer") { showLockIn = true }.buttonStyle(GhostButton(tint: Palette.brass))
-                } else {
-                    Text("Freeze all your rules for a few days — even between blocks. No loosening, no deleting, no deleting apps.")
-                        .font(.p(15, .regular)).foregroundStyle(Palette.muted)
-                    Button("Lock in…") { showLockIn = true }.buttonStyle(GhostButton(tint: Palette.brass))
+    private var protectionCard: some View {
+        Card(glow: model.state.deletionProtection) {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(get: { model.state.deletionProtection && model.state.deletionProtectionOffAt == nil },
+                                     set: { on in
+                                         switch model.setDeletionProtection(on) {
+                                         case .refused(let why): model.problem = why
+                                         case .scheduled(let at): model.toast = String(localized: "Deletion protection turns off at \(Fmt.moment(at, now: model.now)).")
+                                         case .saved: break
+                                         }
+                                     })) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Deletion protection").font(.p(17, .regular)).foregroundStyle(Palette.ink)
+                        Text("No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight.")
+                            .font(.p(14, .regular)).foregroundStyle(Palette.muted)
+                    }
+                }
+                .tint(Palette.brass)
+                if model.state.deletionProtection, let off = model.state.deletionProtectionOffAt {
+                    HStack {
+                        Text("Turns off at \(Fmt.moment(model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off, now: model.now))")
+                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
+                        Spacer()
+                        Button("Keep it on") { _ = model.setDeletionProtection(true) }
+                            .font(.p(14, .medium)).foregroundStyle(Palette.brass)
+                    }
                 }
             }
         }
@@ -83,6 +79,14 @@ struct SettingsView: View {
                 link("Source code (MIT)", "https://github.com/WeldingArc/arc-lock")
                 link("Privacy: nothing leaves this iPhone", "https://github.com/WeldingArc/arc-lock/blob/main/PRIVACY.md")
                 link("Report a problem", "https://github.com/WeldingArc/arc-lock/issues")
+                Button { showGuide = true } label: {
+                    HStack {
+                        Text("Extra protection with a friend").font(.p(16, .regular)).foregroundStyle(Palette.ink)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(Palette.faint)
+                    }
+                }
+                .buttonStyle(.plain)
                 Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Free, no account, no ads. Pretendard font under the SIL Open Font License.")
                     .font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
             }
@@ -162,8 +166,7 @@ struct LockInSheet: View {
     }
 }
 
-/// iOS always lets the owner turn off an app's Screen Time access in Settings. This page explains how to put
-/// that door behind a Screen Time passcode someone else keeps.
+/// Optional: lock iOS's Screen Time settings with a passcode a friend keeps.
 struct HarderGuide: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
@@ -172,15 +175,13 @@ struct HarderGuide: View {
                 Backdrop()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Make it harder to break").font(.p(30, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
+                        Text("Extra protection").font(.p(30, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.top, 8)
-                        Text("Arc Lock already stops you from changing a running block, deleting apps, or setting the clock back. One door stays open by Apple's design: the iPhone's owner can switch off Arc Lock's Screen Time access in Settings. On iOS 26.4 and later, a Screen Time passcode you don't know closes that door too.")
+                        Text("Put iOS's own Screen Time settings behind a passcode that only a friend knows.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted)
                         step(1, "Ask a friend to hold a passcode", "Pick someone you trust. They'll type a 4-digit code you don't see.")
                         step(2, "Open Settings › Screen Time", "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the phone.")
                         step(3, "Recovery goes to your friend", "When iOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPhone.")
-                        step(4, "Keep iOS up to date", "Some iOS versions still let Face ID switch access off under Settings › Apps › Arc Lock. Updates close gaps like this.")
-                        step(5, "Optional: stop app deletion for good", "In Screen Time › Content & Privacy Restrictions, set Deleting Apps to Don't Allow.")
                         Text("In a real emergency your friend can always give you the code. That's the point: a pause long enough for the urge to pass.")
                             .font(.p(14, .regular)).foregroundStyle(Palette.faint)
                     }

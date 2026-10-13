@@ -63,7 +63,7 @@ struct OnboardingView: View {
             VStack(spacing: 26) {
                 feature("calendar.badge.clock", "Schedules", "Pick apps and websites and the hours they stay locked.")
                 feature("hourglass", "Daily limits", "After the time you allow, they lock until midnight.")
-                feature("lock.fill", "No early exit", "While a block runs you can't stop it in the app, delete apps, or change the clock.")
+                feature("lock.fill", "No early exit", "A running block can't be stopped, and Arc Lock can't be deleted.")
             }
             .padding(.top, 8)
         }, button: "Continue", action: { page = 2 })
