@@ -20,6 +20,25 @@ struct FocusSession: Codable, Equatable {
     var endsAt: Date
     var selection: FamilyActivitySelection
     var domains: [String]
+    /// Strict lock: can't be stopped early (when Strict lock is on in Settings).
+    var strict = true
+
+    init(id: UUID = UUID(), startedAt: Date, endsAt: Date, selection: FamilyActivitySelection, domains: [String], strict: Bool = true) {
+        self.id = id; self.startedAt = startedAt; self.endsAt = endsAt; self.selection = selection
+        self.domains = domains; self.strict = strict
+    }
+
+    enum CodingKeys: String, CodingKey { case id, startedAt, endsAt, selection, domains, strict }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+        startedAt = try c.decode(Date.self, forKey: .startedAt)
+        endsAt = try c.decode(Date.self, forKey: .endsAt)
+        selection = try c.decode(FamilyActivitySelection.self, forKey: .selection)
+        domains = (try? c.decode([String].self, forKey: .domains)) ?? []
+        strict = (try? c.decode(Bool.self, forKey: .strict)) ?? true
+    }
 }
 
 struct ArcState: Codable, Equatable {
@@ -34,6 +53,10 @@ struct ArcState: Codable, Equatable {
     /// No app (Arc Lock included) can be deleted while this is on. On by default; switching it off waits for midnight.
     var deletionProtection = true
     var deletionProtectionOffAt: Date?
+    /// Strict lock (global): blocks marked Strict lock can't be stopped or loosened while they run.
+    /// On by default; switching it off waits for midnight.
+    var strictLock = true
+    var strictLockOffAt: Date?
     /// Rule id → store slot. iOS allows an app 50 named stores in total, so rules reuse a fixed pool of slots.
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
@@ -41,12 +64,20 @@ struct ArcState: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
-        case deletionProtection, deletionProtectionOffAt
+        case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt
     }
 
     init() {}
 
     func slot(of id: UUID) -> Int? { slots[id.uuidString] }
+
+    /// A lock-in makes everything strict; otherwise a block is strict when it and the global switch both are.
+    func isStrict(_ plan: RulePlan, now: Date = Date()) -> Bool {
+        Policy.lockInActive(lockInUntil, now: now) || (strictLock && plan.strict)
+    }
+    func isStrict(_ session: FocusSession, now: Date = Date()) -> Bool {
+        Policy.lockInActive(lockInUntil, now: now) || (strictLock && session.strict)
+    }
 
     /// Gives every rule a slot (lowest free first) and frees slots of deleted rules.
     mutating func assignSlots() {
@@ -72,6 +103,8 @@ struct ArcState: Codable, Equatable {
         slots = (try? c.decode([String: Int].self, forKey: .slots)) ?? [:]
         deletionProtection = (try? c.decode(Bool.self, forKey: .deletionProtection)) ?? true
         deletionProtectionOffAt = try? c.decode(Date.self, forKey: .deletionProtectionOffAt)
+        strictLock = (try? c.decode(Bool.self, forKey: .strictLock)) ?? true
+        strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
     }
 }
 
@@ -176,6 +209,32 @@ enum Restarts {
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
 }
 
+/// A time-out's current break, written by the monitor extension when the use threshold passes.
+struct BreakMark: Codable, Equatable {
+    var until: Date
+}
+
+enum Breaks {
+    private static func key(_ id: UUID) -> String { "break.\(id.uuidString)" }
+    static func get(_ id: UUID) -> BreakMark? {
+        guard let d = AppGroup.defaults.data(forKey: key(id)) else { return nil }
+        return try? JSONDecoder().decode(BreakMark.self, from: d)
+    }
+    static func until(_ id: UUID) -> Date? { get(id)?.until }
+    static func set(_ id: UUID, until: Date) {
+        if let d = try? JSONEncoder().encode(BreakMark(until: until)) { AppGroup.defaults.set(d, forKey: key(id)) }
+    }
+    static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
+}
+
+/// Blocks that aren't strict and were stopped by hand: no shield until the date (when the block would end).
+enum Stops {
+    private static func key(_ id: String) -> String { "stopped.\(id)" }
+    static func until(_ id: UUID) -> Date? { AppGroup.defaults.object(forKey: key(id.uuidString)) as? Date }
+    static func set(_ id: UUID, until: Date) { AppGroup.defaults.set(until, forKey: key(id.uuidString)) }
+    static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id.uuidString)) }
+}
+
 enum Names {
     static let session = DeviceActivityName("session")
     static let daily = DeviceActivityName("daily")
@@ -189,6 +248,12 @@ enum Names {
     }
 
     static func activity(_ rule: UUID) -> DeviceActivityName { .init("rule.\(rule.uuidString)") }
+    /// A time-out's break: a one-off monitor whose end lifts the break and restarts the count.
+    static func breakActivity(_ rule: UUID) -> DeviceActivityName { .init("brk.\(rule.uuidString)") }
+    static func breakRuleID(_ activity: DeviceActivityName) -> UUID? {
+        guard activity.rawValue.hasPrefix("brk.") else { return nil }
+        return UUID(uuidString: String(activity.rawValue.dropFirst(4)))
+    }
     static func ruleID(_ activity: DeviceActivityName) -> UUID? {
         guard activity.rawValue.hasPrefix("rule.") else { return nil }
         return UUID(uuidString: String(activity.rawValue.dropFirst(5)))

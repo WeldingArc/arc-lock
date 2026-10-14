@@ -10,17 +10,25 @@ final class ActivityMonitor: DeviceActivityMonitor {
         let (state, changed) = Engine.housekeep()
         // The daily monitor also re-registers limits whose thresholds were only meant for yesterday.
         if activity == Names.daily || changed { Monitoring.sync(state) }
+        Monitoring.finishBreaks(state)
         Engine.reconcile(state)
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
-        let (state, _) = Engine.housekeep()
+        var (state, _) = Engine.housekeep()
         var skip = Set<UUID>()
         if let id = Names.ruleID(activity), let rule = state.rules.first(where: { $0.id == id }), rule.plan.kind == .schedule {
             // The window is over — lift it now even if this callback came a moment early.
             if let store = Engine.store(for: id, in: state) { Shielding.clear(store) }
             skip.insert(id)
+        }
+        // A time-out's break is over: lift it and start counting toward the next one. Then look again at what was
+        // waiting for it to end (Strict lock switching off never happens under a running strict break).
+        if Monitoring.finishBreaks(state, slack: Names.breakRuleID(activity) != nil ? Engine.edge : 0) {
+            let (fresh, changed) = Engine.housekeep()
+            if changed { Monitoring.sync(fresh) }
+            state = fresh
         }
         // A Block-now end is left to reconcile: it only lifts the session that is really over, never a newer one.
         Engine.reconcile(state, skip: skip)
@@ -53,10 +61,19 @@ final class ActivityMonitor: DeviceActivityMonitor {
             if tenth >= 10 { Monitoring.rearm(rule, state: state, now: now) }
             return
         }
+        if rule.plan.kind == .timeout {
+            guard tenth >= 10, (Breaks.until(id) ?? .distantPast) <= now else { return }
+            Monitoring.startBreak(rule, now: now)
+            let back = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
+            Notify.post(id: "break.\(id)", title: rule.plan.name,
+                        body: L("Time for a %@ break. Back at %@.", minutesLabel(rule.plan.breakMinutes), Fmt.time(back)))
+            Engine.reconcile(StateStore.load(), now: now)
+            return
+        }
         Marks.raise(id, to: tenth, now: now)
         if tenth >= 10 {
             if let store = Engine.store(for: id, in: state) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store)
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule.plan, now: now))
             }
             Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("Today's limit is used up. It unlocks at midnight."))
         }
@@ -70,9 +87,15 @@ final class ActivityMonitor: DeviceActivityMonitor {
               let rule = StateStore.load().rules.first(where: { $0.id == id }), Engine.counts(rule, now: now),
               let minutes = Monitoring.registration(id)?.thresholds[event.rawValue],
               // the warning comes 5 minutes before the limit, so the same clock check applies
-              Plausibility.thresholdIsReal(minutes: max(1, minutes - 5), countingSince: Monitoring.countingSince(id, now: now), now: now)
+              Plausibility.thresholdIsReal(minutes: max(1, minutes - (rule.plan.kind == .timeout ? 1 : 5)),
+                                           countingSince: Monitoring.countingSince(id, now: now), now: now)
         else { return }
-        Notify.post(id: "warn.\(id)", title: rule.plan.name, body: L("5 minutes left for today."))
+        if rule.plan.kind == .timeout {
+            Notify.post(id: "warn.\(id)", title: rule.plan.name,
+                        body: L("1 minute until a %@ break.", minutesLabel(rule.plan.breakMinutes)))
+        } else {
+            Notify.post(id: "warn.\(id)", title: rule.plan.name, body: L("5 minutes left for today."))
+        }
     }
 
     override func intervalWillStartWarning(for activity: DeviceActivityName) {
@@ -83,4 +106,13 @@ final class ActivityMonitor: DeviceActivityMonitor {
               next.start.timeIntervalSinceNow < 10 * 60 else { return }
         Notify.post(id: "soon.\(id)", title: rule.plan.name, body: L("Starts in 5 minutes, at %@.", Fmt.time(next.start)))
     }
+}
+
+/// "10 min", "1 hr", "1 hr 30 min" in the reader's language.
+func minutesLabel(_ minutes: Int) -> String {
+    let f = DateComponentsFormatter()
+    f.allowedUnits = minutes >= 60 ? [.hour, .minute] : [.minute]
+    f.unitsStyle = .short
+    f.zeroFormattingBehavior = .dropAll
+    return f.string(from: TimeInterval(minutes * 60)) ?? "\(minutes) min"
 }

@@ -28,11 +28,18 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
         let title: String, subtitle: String
         if let h = holder {
             let when = Fmt.moment(h.until)
+            let reason: String
             switch h.kind {
-            case .limit: title = L("Today's limit is used up")
-            case .schedule, .session: title = L("Locked until %@", when)
+            case .limit:
+                title = L("Today's limit is used up")
+                reason = L("It unlocks at %@.", when)
+            case .timeout:
+                title = L("Time for a break")
+                reason = L("Back at %@.", when)
+            case .schedule, .session:
+                title = L("Locked until %@", when)
+                reason = L("This block ends on its own.")
             }
-            let reason = h.kind == .limit ? L("It unlocks at %@.", when) : L("This block ends on its own.")
             subtitle = "\(h.name)\n\(reason)"
         } else {
             title = L("Locked by Arc Lock")
@@ -52,7 +59,7 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
 /// Which block is holding something, and until when (the latest end wins: that's when it really opens).
 struct Holder {
-    enum Kind { case schedule, limit, session }
+    enum Kind { case schedule, limit, timeout, session }
     let name: String
     let until: Date
     let kind: Kind
@@ -68,9 +75,11 @@ struct Holder {
         }
         var found: [Holder] = []
         for rule in state.rules where holds(rule.selection) {
-            let status = Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), calendar: calendar)
+            let status = Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), breakUntil: Breaks.until(rule.id),
+                                   stoppedUntil: Stops.until(rule.id), calendar: calendar)
             if let until = status.blockingUntil {
-                found.append(Holder(name: rule.plan.name, until: until, kind: rule.plan.kind == .limit ? .limit : .schedule))
+                let kind: Kind = rule.plan.kind == .limit ? .limit : rule.plan.kind == .timeout ? .timeout : .schedule
+                found.append(Holder(name: rule.plan.name, until: until, kind: kind))
             }
         }
         if let s = state.session, s.endsAt > now, holds(s.selection) {

@@ -1,6 +1,6 @@
 # Arc Lock — Privacy Policy
 
-_Last updated: October 12, 2026_
+_Last updated: October 15, 2026_
 
 **Arc Lock collects no data.** It has no account, no server, no analytics, no ads and no tracking. Nothing you do in Arc Lock leaves your iPhone.
 
@@ -8,15 +8,15 @@ _Last updated: October 12, 2026_
 
 Everything stays on your iPhone, in Arc Lock's own storage (an App Group shared only with Arc Lock's own extensions):
 
-- the blocks you create: their names, hours, days, daily limits and the website addresses you type;
+- the blocks you create: their names, hours, days, daily limits, time-outs and the website addresses you type;
 - Apple's **opaque tokens** for the apps, categories and websites you pick. Arc Lock can't read which apps these tokens stand for — only iOS can show their names and icons;
-- for each daily limit, how far today's use has gone, in quarters (for example "over half used"). iOS tells Arc Lock when a threshold passes; it never tells Arc Lock how long you used which app.
+- for each daily limit, how far today's use has gone, in tenths (for example "over half used"), and for each time-out, when its current break ends. iOS tells Arc Lock when a threshold passes; it never tells Arc Lock how long you used which app.
 
 Deleting Arc Lock deletes all of it.
 
 ## Screen Time
 
-Arc Lock uses Apple's Screen Time frameworks (Family Controls, Managed Settings, Device Activity) with the permission you grant. Apple keeps your activity data on the device and does not share it with Arc Lock. Arc Lock never sends Screen Time information anywhere.
+Arc Lock uses Apple's Screen Time frameworks (Family Controls, Managed Settings, Device Activity) with the permission you grant. Apple keeps your activity data on the device and does not share it with Arc Lock. The minutes shown under a daily limit or time-out are drawn by a Device Activity report extension: iOS gives the numbers only to that sandboxed extension, which can't send them anywhere, and the Arc Lock app never receives them. Arc Lock never sends Screen Time information anywhere.
 
 ## Notifications
 

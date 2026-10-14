@@ -12,7 +12,7 @@ struct ArcLockApp: App {
                 .preferredColorScheme(.dark)
                 .tint(Palette.brass)
                 .onChange(of: phase) { _, p in
-                    if p == .active { model.refresh(); Task { await model.checkAccess() } }
+                    if p == .active { model.didBecomeActive(); Task { await model.checkAccess() } }
                 }
         }
     }

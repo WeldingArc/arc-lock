@@ -1,3 +1,4 @@
+import DeviceActivity
 import FamilyControls
 import SwiftUI
 
@@ -15,6 +16,7 @@ struct HomeView: View {
     @State private var showBlockNow = false
     @State private var showSettings = false
     @State private var showLockIn = false
+    @State private var stopping: StopTarget?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -29,7 +31,12 @@ struct HomeView: View {
                 section(title: "Daily limits", kind: .limit, rules: model.limits,
                         empty: "After the time you allow each day, apps lock until midnight.")
                     .id("limits")
-                Text("While a block runs it can't be changed or stopped. With deletion protection on, no app can be deleted.")
+                section(title: "Time-outs", kind: .timeout, rules: model.timeouts,
+                        empty: "After a stretch of use, apps take a short break, then open again.")
+                    .id("timeouts")
+                Text(model.strictLockActive
+                     ? "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted."
+                     : "Strict lock is off, so any block can be stopped.")
                     .font(.p(13, .regular, .footnote))
                     .foregroundStyle(Palette.faint)
                     .multilineTextAlignment(.center)
@@ -41,18 +48,30 @@ struct HomeView: View {
         }
         .scrollIndicators(.hidden)
         #if DEBUG
-        .task { if Demo.shot == "limits" { try? await Task.sleep(for: .milliseconds(300)); proxy.scrollTo("limits", anchor: .top) } }
+        .task {
+            if Demo.shot == "limits" || Demo.shot == "timeouts" {
+                try? await Task.sleep(for: .milliseconds(300))
+                proxy.scrollTo(Demo.shot, anchor: .top)
+            }
+        }
         #endif
         }
         .sheet(item: $editing) { target in RuleEditor(target: target).environmentObject(model) }
         .sheet(isPresented: $showBlockNow) { BlockNowSheet().environmentObject(model) }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(model) }
         .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
+        .confirmationDialog(Text(stopping?.title ?? ""), isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                            titleVisibility: .visible, presenting: stopping) { target in
+            Button(target.action) { stop(target) }
+        } message: { target in
+            Text(target.message)
+        }
         #if DEBUG
         .onAppear {
             switch Demo.shot {
             case "editor": editing = .edit(Demo.study)
             case "limit": editing = .edit(Demo.social)
+            case "timeout": editing = .edit(Demo.shorts)
             case "blocknow": showBlockNow = true
             case "settings", "guide": showSettings = true
             case "lockin": showLockIn = true
@@ -86,9 +105,16 @@ struct HomeView: View {
                         Spacer()
                         Pill(text: String(localized: "Until \(Fmt.moment(s.endsAt, now: model.now))"), tint: Palette.brass, icon: "lock.fill")
                     }
-                    Text("\(durationText(s.endsAt.timeIntervalSince(model.now))) left · can't be stopped")
+                    Text(model.canStopSession ? "\(durationText(s.endsAt.timeIntervalSince(model.now))) left"
+                                              : "\(durationText(s.endsAt.timeIntervalSince(model.now))) left · can't be stopped")
                         .font(.p(14, .regular, .subheadline)).foregroundStyle(Palette.muted)
                     if !s.selection.isEmpty { TokenIcons(selection: s.selection) }
+                    if model.canStopSession {
+                        HStack {
+                            Spacer()
+                            StopButton { stopping = .session(until: s.endsAt) }
+                        }
+                    }
                 }
             }
         } else {
@@ -132,8 +158,8 @@ struct HomeView: View {
                         Image(systemName: "plus").font(.system(size: 16, weight: .regular)).foregroundStyle(Palette.brass)
                             .frame(width: 44, height: 32)
                     }
-                    .accessibilityLabel(Text(kind == .schedule ? "Add a schedule" : "Add a daily limit"))
-                    .disabled(!model.canAddRule)
+                    .accessibilityLabel(Text(addTitle(kind)))
+                    .disabled(!model.canAdd(kind))
                 }
             }
             .padding(.horizontal, 4)
@@ -141,20 +167,110 @@ struct HomeView: View {
                 Card {
                     VStack(spacing: 14) {
                         Text(empty).font(.p(15, .regular)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-                        Button(kind == .schedule ? "Add a schedule" : "Add a daily limit") { editing = .new(kind) }
+                        Button(addTitle(kind)) { editing = .new(kind) }
                             .buttonStyle(GhostButton(tint: Palette.brass))
-                            .disabled(!model.canAddRule)
+                            .disabled(!model.canAdd(kind))
                     }
                     .frame(maxWidth: .infinity)
                 }
             } else {
                 ForEach(rules) { rule in
-                    Button { editing = .edit(rule.id) } label: { RuleRow(rule: rule) }
+                    let stoppable = model.canStop(rule)
+                    Button { editing = .edit(rule.id) } label: { RuleRow(rule: rule, stoppable: stoppable) }
                         .buttonStyle(.plain)
+                        // on top of the card, not inside its button, so a tap on Stop never opens the editor
+                        .overlay(alignment: .bottomTrailing) {
+                            if stoppable {
+                                StopButton { stopping = StopTarget(rule, model.status(rule)) }.padding(20)
+                            }
+                        }
                 }
             }
         }
         .padding(.top, 10)
+    }
+
+    private func addTitle(_ kind: RuleKind) -> LocalizedStringKey {
+        switch kind {
+        case .schedule: "Add a schedule"
+        case .limit: "Add a daily limit"
+        case .timeout: "Add a time-out"
+        }
+    }
+
+    private func stop(_ target: StopTarget) {
+        let outcome: AppModel.Outcome
+        switch target {
+        case .rule(let id, _, _): outcome = model.stop(id)
+        case .session: outcome = model.stopSession()
+        }
+        switch outcome {
+        case .refused(let why): model.problem = why
+        default: model.toast = target.done
+        }
+    }
+}
+
+/// A block without Strict lock that the user asked to stop, and what to say about it.
+enum StopTarget: Identifiable {
+    case rule(UUID, name: String, status: RuleStatus)
+    case session(until: Date)
+
+    init(_ rule: Rule, _ status: RuleStatus) { self = .rule(rule.id, name: rule.plan.name, status: status) }
+
+    var id: String {
+        switch self { case .rule(let id, _, _): id.uuidString; case .session: "session" }
+    }
+    var title: String {
+        switch self {
+        case .rule(_, let name, .onBreak): String(localized: "End the break for \(name)?")
+        case .rule(_, let name, _): String(localized: "Stop \(name)?")
+        case .session: String(localized: "Stop Block now?")
+        }
+    }
+    var message: String {
+        switch self {
+        case .rule(_, _, .running(let until)):
+            String(localized: "It stays off until \(Fmt.time(until)) and starts again on its own next time.")
+        case .rule(_, _, .reached): String(localized: "The apps open until midnight. The limit starts again tomorrow.")
+        case .rule(_, _, .onBreak): String(localized: "The apps open now and the count starts over.")
+        case .rule: String(localized: "It starts again on its own next time.")
+        case .session: String(localized: "The apps open now.")
+        }
+    }
+    var action: String {
+        switch self {
+        case .rule(_, _, .running(let until)): String(localized: "Stop until \(Fmt.time(until))")
+        case .rule(_, _, .reached): String(localized: "Stop for today")
+        case .rule(_, _, .onBreak): String(localized: "End break")
+        case .rule: String(localized: "Stop")
+        case .session: String(localized: "Stop Block now")
+        }
+    }
+    var done: String {
+        switch self {
+        case .rule(_, let name, .onBreak): String(localized: "The break for \(name) is over.")
+        case .rule(_, let name, _): String(localized: "\(name) is stopped.")
+        case .session: String(localized: "Block now is stopped.")
+        }
+    }
+}
+
+/// Small "Stop" control on a block without Strict lock.
+struct StopButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "stop.circle").font(.system(size: 13, weight: .regular))
+                Text("Stop").font(.p(13, .medium, .footnote))
+            }
+            .foregroundStyle(Palette.brass)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Capsule().fill(Palette.brass.opacity(0.12)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -198,6 +314,8 @@ struct StatusHero: View {
 struct RuleRow: View {
     @EnvironmentObject private var model: AppModel
     let rule: Rule
+    /// The block isn't strict and is blocking right now: leave room for the Stop button laid over the card.
+    var stoppable = false
 
     var body: some View {
         let status = model.status(rule)
@@ -218,8 +336,15 @@ struct RuleRow: View {
                         }
                     }
                 }
-                if rule.plan.kind == .limit, rule.plan.isOn, status != .resting {
-                    UsageBar(level: model.usageLevel(rule))
+                if rule.plan.kind.countsUse, rule.plan.isOn {
+                    switch status {
+                    case .reached:
+                        Text("All used. Locked until midnight.").font(.p(12, .regular, .caption)).foregroundStyle(Palette.rose)
+                    case .counting, .onBreak:
+                        UsageLine(rule: rule)
+                    default:
+                        EmptyView()
+                    }
                 }
                 if let p = rule.pending {
                     HStack(spacing: 6) {
@@ -229,6 +354,12 @@ struct RuleRow: View {
                             .font(.p(13, .regular, .footnote))
                     }
                     .foregroundStyle(Palette.brass)
+                }
+                if stoppable {
+                    HStack {
+                        Spacer()
+                        StopButton {}.hidden().accessibilityHidden(true)
+                    }
                 }
             }
         }
@@ -249,6 +380,7 @@ struct RuleRow: View {
         switch p.kind {
         case .schedule: return "\(p.start.text) – \(p.end.text) · \(p.days.dayText)"
         case .limit: return String(localized: "\(minutesText(p.limitMinutes)) a day · \(p.days.dayText)")
+        case .timeout: return String(localized: "\(minutesText(p.breakMinutes)) break after \(minutesText(p.limitMinutes)) · \(p.days.dayText)")
         }
     }
 
@@ -261,31 +393,42 @@ struct RuleRow: View {
         case .counting: Pill(text: String(localized: "Counting"), tint: Palette.sage)
         case .resting: Pill(text: String(localized: "Not today"), tint: Palette.faint)
         case .reached: Pill(text: String(localized: "Used up"), tint: Palette.rose, icon: "lock.fill")
+        case .onBreak(let until): Pill(text: String(localized: "Break until \(Fmt.time(until))"), tint: Palette.brass, icon: "cup.and.saucer.fill")
+        case .stopped(let until): Pill(text: String(localized: "Stopped until \(Fmt.moment(until, now: model.now))"), tint: Palette.faint, icon: "pause.fill")
         }
     }
 }
 
-/// Today's use of a daily limit in tenths (Screen Time reports thresholds, not exact minutes).
-struct UsageBar: View {
-    let level: Int
+/// Today's exact use, drawn by the usage report extension (iOS hands the minutes only to it).
+struct UsageLine: View {
+    @EnvironmentObject private var model: AppModel
+    let rule: Rule
+    @ScaledMetric(relativeTo: .caption) private var line: CGFloat = 17
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 3) {
-                ForEach(1...10, id: \.self) { k in
-                    Capsule().fill(k <= level ? (level >= 10 ? Palette.rose : Palette.sage) : Color.white.opacity(0.07))
-                        .frame(height: 5)
-                }
-            }
-            Text(caption).font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
-        }
-        .accessibilityElement(children: .combine)
+        content.frame(height: rule.plan.kind == .limit ? line + 12 : line)
     }
-    private var caption: LocalizedStringKey {
-        switch level {
-        case ..<1: return "Under 10% used today"
-        case 10...: return "All used — locked until midnight"
-        default: return "Over \(level * 10)% used today"
+
+    @ViewBuilder private var content: some View {
+        #if DEBUG
+        if Demo.isOn { UsageView(usage: Demo.usage(rule.id)) } else { report }
+        #else
+        report
+        #endif
+    }
+
+    @ViewBuilder private var report: some View {
+        if let slot = model.state.slot(of: rule.id) {
+            DeviceActivityReport(.init(UsageSummary.context(slot: slot)), filter: filter)
+                .id(model.reportEpoch)
         }
+    }
+
+    private var filter: DeviceActivityFilter {
+        let s = rule.selection
+        let today = Calendar.current.dateInterval(of: .day, for: model.now) ?? DateInterval(start: model.now, duration: 1)
+        return DeviceActivityFilter(segment: .hourly(during: today), devices: .init([.iPhone]),
+                                    applications: s.applicationTokens, categories: s.categoryTokens, webDomains: s.webDomainTokens)
     }
 }
 

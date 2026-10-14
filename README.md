@@ -2,13 +2,13 @@
 
 <h1 align="center">Arc Lock</h1>
 <p align="center"><b>Blocks you can't break.</b><br>
-A free, open-source app and website blocker for iPhone — schedules, daily limits, and a lock you can't talk your way out of.</p>
+A free, open-source app and website blocker for iPhone — schedules, daily limits, time-outs, and a lock you can't talk your way out of.</p>
 
 <p align="center">Free · No account · No ads · No tracking · MIT licensed</p>
 
 ---
 
-Most blockers keep their "hard mode" — the part that actually stops you — behind a subscription. Arc Lock gives it away. You choose the apps and websites, choose when they lock, and once a block is running **nothing in the app can stop it early, no app can be deleted, and the clock can't be set back.**
+Most blockers keep their "hard mode" — the part that actually stops you — behind a subscription. Arc Lock gives it away. You choose the apps and websites, choose when they lock, and once a block with **Strict lock** is running **nothing in the app can stop it early, no app can be deleted, and the clock can't be set back.**
 
 <p align="center">
   <img src="docs/screenshots/01-home.png" width="200" alt="Home: what is locked right now">
@@ -20,15 +20,18 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
 ## What it does
 
 - **Schedules** — lock apps, app categories and websites during set hours on the days you pick (up to 22 hours; overnight windows like 23:00 → 07:00 work too).
-- **Daily limits** — after the time you allow (5 min – 8 h), the apps lock until midnight. A heads-up comes 5 minutes before.
+- **Daily limits** — after the time you allow (5 min – 8 h), the apps lock until midnight. Each limit shows exactly how many minutes are used and left today. A heads-up comes 5 minutes before.
+- **Time-outs** — not a full block, a pause: after a stretch of use (5 min – 4 h) the apps take a break (1 min – 2 h), then open again. Repeats all day.
 - **Block now** — lock something right away for 15 minutes to 12 hours.
 - **Websites by address** — type `youtube.com` and it's blocked in Safari, Chrome and other browsers.
-- **The lock** — while a block runs:
-  - it can't be edited, paused or deleted in Arc Lock,
+- **Strict lock** — on by default, and set per block. While a strict block runs:
+  - it can't be edited, stopped or deleted in Arc Lock,
   - **no app can be deleted** from the iPhone (Arc Lock included),
-  - the date and time can't be changed by hand (they stay automatic as long as any block is switched on),
+  - the date and time can't be changed by hand (they stay automatic as long as any strict block is switched on),
   - the block screen has exactly one button: **Close**.
-- **Daily limits are locked in for the day** — you can make a limit stricter once a day (what you've already used today keeps counting); more time, fewer apps, deleting it or a second change only take effect at midnight.
+
+  A block without Strict lock can be stopped or changed any time. Strict lock can also be switched off for the whole app in Settings; that only takes effect at midnight.
+- **Daily limits and time-outs are locked in for the day** — you can make one stricter once a day (what you've already used today keeps counting); more time, a shorter break, fewer apps, deleting it or a second change only take effect at midnight.
 - **Deletion protection** — on by default: no app can be deleted from the iPhone, Arc Lock included. Switching it off only takes effect at midnight.
 - **Lock-in** — freeze every rule for 1–30 days, even between blocks. No loosening, no deleting rules, no deleting apps — and changes you queued before it wait until it's over. No early exit.
 
@@ -40,38 +43,40 @@ Arc Lock is built entirely on Apple's **Screen Time API** — three frameworks t
 |---|---|
 | **FamilyControls** | Asking for permission (`AuthorizationCenter.requestAuthorization(for: .individual)` — Face ID, no account) and the system app picker. The picker returns **opaque tokens**: Arc Lock can show an app's icon and name but can never read *which* apps you chose. |
 | **ManagedSettings** | The actual locking: `shield` covers apps and websites with the block screen; `webContent.blockedByFilter` blocks typed web addresses in every browser; `application.denyAppRemoval` stops app deletion; `dateAndTime.requireAutomaticDateAndTime` stops clock tricks. |
-| **DeviceActivity** | Waking Arc Lock up in the background: when a schedule starts or ends, when a limit's usage passes a threshold, and at midnight — even if Arc Lock hasn't been opened for days. |
+| **DeviceActivity** | Waking Arc Lock up in the background: when a schedule starts or ends, when a limit's usage passes a threshold, when a break ends, and at midnight — even if Arc Lock hasn't been opened for days. Its `DeviceActivityReport` extension draws the minutes used today inside the app. |
 
 ```mermaid
 flowchart TD
     You(["You"]) -->|"create a block"| App["Arc Lock app<br/>(lock policy)"]
     App -->|"saves rules"| Store[("Shared storage<br/>on this iPhone")]
     App -->|"asks iOS to watch<br/>times and usage"| DA["iOS DeviceActivity"]
-    DA -->|"block starts · ends<br/>limit reached · midnight"| Mon["Monitor extension<br/>(runs in the background)"]
+    DA -->|"block starts · ends<br/>limit reached · break over · midnight"| Mon["Monitor extension<br/>(runs in the background)"]
     Store <--> Mon
     Mon -->|"apply / lift"| MS[("ManagedSettings<br/>one store per block")]
     App -->|"re-checks on open"| MS
     MS -->|"covers blocked apps & sites"| Shield["Block screen<br/>one button: Close"]
 ```
 
-### Four parts
+### Five parts
 
 1. **The app** (`App/`) — where you create blocks. Every change goes through one lock policy (below) before it's saved.
 2. **The monitor extension** (`Extensions/Monitor`) — a `DeviceActivityMonitor` that iOS runs in the background. Each schedule or limit is one monitored activity:
    - a **schedule** is a repeating daily interval (e.g. 09:00–17:00); the extension shields when it starts and lifts the shield when it ends. Weekdays are checked in the extension, so one activity covers every day of the week.
    - a **daily limit** is an all-day interval (00:00–23:59) with usage **events** at every tenth of the allowed time. The 100 % event shields the apps; the others drive the progress bar (iOS reports thresholds, never minutes). A new limit starts counting when it's saved, then from every midnight (`includesPastActivity: false`). When a limit is made stricter mid-day, iOS restarts its count, so Arc Lock registers only what's left — today's use, as far as the tenths prove it, carries over. Because that carry-over rounds down to a tenth, only one such restart is allowed per limit per day; later changes wait for midnight.
    - **Guarding against false locks:** iOS sometimes reports a threshold too early (a known issue on iOS 26–27). Time used can't outrun the clock, so a threshold that couldn't have been reached yet is ignored (`Plausibility` in Core) and the limit is re-armed with what's provably used (at most 3 times a day). That stops the common glitch — right after registering — from locking you out; a misreport later in the day can't be told apart from real use.
+   - a **time-out** is an all-day interval with one usage event at the allowed stretch. When it fires, the extension shields the apps and starts a one-off activity that ends with the break; its end lifts the shield and re-registers the usage event, so counting starts over. (iOS wants activities of at least 15 minutes, so a short break's activity starts in the past.)
    - a **daily housekeeping** activity at midnight applies changes that were waiting for the next day and ends expired lock-ins.
 3. **The block screen** (`Extensions/ShieldConfig`) — what iOS shows over a blocked app: which block holds it and when it ends.
-4. **The block screen's button** (`Extensions/ShieldAction`) — always answers `.close`. There is no "5 more minutes".
+4. **The block screen's button** (`Extensions/ShieldAction`) — always answers `.close`. There is no "5 more minutes". Pressing it also re-checks the rules, so a block whose time is up lifts even if a callback was missed.
+5. **The usage line** (`Extensions/Report`) — a `DeviceActivityReport` extension. iOS hands Screen Time minutes only to this sandboxed extension, which draws "17 min used today · 13 min left" inside the app; Arc Lock itself never sees the numbers.
 
 ### One store per rule
 
-Each rule writes to its **own named `ManagedSettingsStore`**. iOS combines all stores and keeps the strictest value, so overlapping blocks never undo each other, and ending one block simply clears its store. Every store that shields something also sets `denyAppRemoval` and `requireAutomaticDateAndTime`; those disappear with it when the block ends.
+Each rule writes to its **own named `ManagedSettingsStore`**. iOS combines all stores and keeps the strictest value, so overlapping blocks never undo each other, and ending one block simply clears its store. Every store that shields something for a strict block also sets `denyAppRemoval` and `requireAutomaticDateAndTime`; those disappear with it when the block ends.
 
-iOS allows an app 20 monitored activities and 50 named stores, so Arc Lock keeps up to 18 blocks and gives each one a slot from a fixed pool (`slot.0`…`slot.17`, plus `session`, `lockin` and `clock`) that is reused after a block is deleted. A shield set with more than 50 items silently blocks nothing, so each block takes at most 49 apps and 49 picked websites (whole categories have no limit).
+iOS allows an app 20 monitored activities and 50 named stores, so Arc Lock keeps up to 18 blocks (a time-out needs two activities: its usage and its break) and gives each one a slot from a fixed pool (`slot.0`…`slot.17`, plus `session`, `lockin` and `clock`) that is reused after a block is deleted. A shield set with more than 50 items silently blocks nothing, so each block takes at most 49 apps and 49 picked websites (whole categories have no limit).
 
-The `clock` store keeps the date and time automatic whenever any block is switched on, so the clock can't be moved past a block — or past a change that's waiting for midnight.
+The `clock` store keeps the date and time automatic whenever any strict block is switched on, so the clock can't be moved past a block — or past a change that's waiting for midnight.
 
 ### Rules are the source of truth
 
@@ -83,12 +88,13 @@ All of it lives in [`Core/ArcCore.swift`](Core/ArcCore.swift) — plain Swift wi
 
 | Rule is… | You can… |
 |---|---|
-| a **running** schedule, a **used-up** limit, or a **Block now** session | look, not touch — until it ends |
-| a **daily limit counting today** | make it stricter now, once a day (today's use keeps counting); anything else — more time, fewer apps or days, deleting, a second change — waits until midnight |
-| anything during a **lock-in** | add new blocks; existing ones are frozen, and changes queued earlier wait until it ends |
+| a **running** schedule, a **used-up** limit, a time-out **on a break**, or a **Block now** session — with Strict lock | look, not touch — until it ends |
+| a **daily limit or time-out counting today** — with Strict lock | make it stricter now, once a day (today's use keeps counting); anything else — more time, a shorter break, fewer apps or days, deleting, a second change — waits until midnight |
+| any block **without Strict lock** (or with Strict lock switched off in Settings) | change it, stop it or delete it any time |
+| anything during a **lock-in** | add new blocks; existing ones are frozen, strict or not, and changes queued earlier wait until it ends |
 | a schedule **between windows** | change anything — a schedule lasts at most 22 hours, and all schedules together must leave a free hour every day, so there's always such a time (and Arc Lock can always be opened, even if a block includes it) |
 
-"Stricter" is computed, not guessed: more apps, more days, fewer minutes, or a time window that covers the old one.
+"Stricter" is computed, not guessed: more apps, more days, fewer minutes, a longer break, Strict lock switched on, or a time window that covers the old one.
 
 ## Privacy
 
@@ -106,7 +112,7 @@ xcodegen generate
 open ArcLock.xcodeproj
 ```
 
-Set your own team and bundle-ID prefix in `project.yml` (four targets, one App Group), then run on your iPhone. The **Family Controls (Development)** capability works for any team; shipping to TestFlight or the App Store needs Apple to approve the **Family Controls (Distribution)** entitlement for every bundle ID (the app and its three extensions).
+Set your own team and bundle-ID prefix in `project.yml` (five targets, one App Group), then run on your iPhone. The **Family Controls (Development)** capability works for any team; shipping to TestFlight or the App Store needs Apple to approve the **Family Controls (Distribution)** entitlement for every bundle ID (the app and its four extensions).
 
 Core logic tests run on the Mac:
 
@@ -115,7 +121,7 @@ mkdir -p build
 swiftc -parse-as-library Core/ArcCore.swift Tests/CoreTests.swift -o build/coretests && build/coretests
 ```
 
-Debug builds have a screenshot mode with sample data (no Screen Time calls): launch with `-demo YES -shot home` (or `editor`, `limit`, `blocknow`, `settings`, `lockin`, `guide`, `onboarding`).
+Debug builds have a screenshot mode with sample data (no Screen Time calls): launch with `-demo YES -shot home` (or `editor`, `limit`, `timeout`, `timeouts`, `blocknow`, `settings`, `lockin`, `guide`, `onboarding`).
 
 ### Layout
 
@@ -123,9 +129,10 @@ Debug builds have a screenshot mode with sample data (no Screen Time calls): lau
 Core/ArcCore.swift          lock policy, time math, validation (no Apple frameworks; unit-tested)
 Shared/                     state in the App Group, shields, monitors, reconcile (app + extensions)
 App/                        SwiftUI app, theme, demo mode
-Extensions/Monitor          DeviceActivityMonitor: schedules, limits, midnight housekeeping
+Extensions/Monitor          DeviceActivityMonitor: schedules, limits, time-outs, midnight housekeeping
 Extensions/ShieldConfig     the block screen
 Extensions/ShieldAction     the block screen's only button
+Extensions/Report           DeviceActivityReport: minutes used today, drawn inside the app
 Tests/CoreTests.swift       Mac-runnable tests for Core
 tools/make_icon.swift       renders the icon and the block-screen mark
 ```

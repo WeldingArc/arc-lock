@@ -1,4 +1,4 @@
-# Arc Lock — iPhone app + three Screen Time extensions. Generate the Xcode project with `xcodegen generate`
+# Arc Lock — iPhone app + four Screen Time extensions. Generate the Xcode project with `xcodegen generate`
 # (the .xcodeproj is not committed). Every target needs the Family Controls entitlement and the shared App Group.
 name: ArcLock
 options:
@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.1"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: "6"
     DEVELOPMENT_TEAM: 446W55N7PB
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
@@ -31,6 +31,7 @@ targets:
         excludes: ["Info.plist", "ArcLock.entitlements", "PrivacyInfo.xcprivacy", "Fonts/**", "Resources/**"]
       - path: Shared
       - path: Core
+      - path: Extensions/Report/UsageView.swift
       - path: App/Fonts
         type: folder
         buildPhase: resources
@@ -48,6 +49,7 @@ targets:
       - target: ArcLockMonitor
       - target: ArcLockShieldConfig
       - target: ArcLockShieldAction
+      - target: ArcLockReport
     scheme: {}
     settings:
       base:
@@ -114,7 +116,13 @@ targets:
     sources:
       - path: Extensions/ShieldAction
         excludes: ["Info.plist", "*.entitlements"]
+      - path: Shared
+      - path: Core
       - path: Extensions/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: App/Resources/Localizable.xcstrings
+        buildPhase: resources
+      - path: App/Resources/en.lproj
         buildPhase: resources
     settings:
       base:
@@ -124,4 +132,30 @@ targets:
         INFOPLIST_FILE: Extensions/ShieldAction/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Extensions/ShieldAction/ShieldAction.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  ArcLockReport:
+    type: extensionkit-extension
+    platform: iOS
+    sources:
+      - path: Extensions/Report
+        excludes: ["Info.plist", "*.entitlements"]
+      - path: Shared
+      - path: Core
+      - path: App/Fonts/Pretendard-Regular.otf
+        buildPhase: resources
+      - path: Extensions/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: App/Resources/Localizable.xcstrings
+        buildPhase: resources
+      - path: App/Resources/en.lproj
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: ArcLockReport
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock.report
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_FILE: Extensions/Report/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Extensions/Report/Report.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES

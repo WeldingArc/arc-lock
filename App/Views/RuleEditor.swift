@@ -1,8 +1,9 @@
 import FamilyControls
 import SwiftUI
 
-/// Create or change a schedule or a daily limit. What may be changed follows the lock policy:
-/// read-only while it runs (or during a lock-in), looser limit changes wait until midnight.
+/// Create or change a schedule, a daily limit or a time-out. What may be changed follows the lock policy:
+/// a Strict-lock block is read-only while it runs (or during a lock-in), and looser changes to a counting
+/// limit or time-out wait until midnight. A block without Strict lock can always be changed.
 struct RuleEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -39,7 +40,12 @@ struct RuleEditor: View {
                             if existing == nil { kindSwitch }
                             nameField
                             appsCard
-                            if plan.kind == .schedule { websitesCard; whenCard } else { limitCard }
+                            switch plan.kind {
+                            case .schedule: websitesCard; whenCard
+                            case .limit: limitCard
+                            case .timeout: timeoutCard
+                            }
+                            strictCard
                             if existing != nil && !readOnly { deleteButton }
                         }
                         .disabled(readOnly)
@@ -50,7 +56,7 @@ struct RuleEditor: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(existing == nil ? (plan.kind == .schedule ? String(localized: "New schedule") : String(localized: "New daily limit")) : plan.name)
+            .navigationTitle(existing == nil ? newTitle : plan.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -92,7 +98,15 @@ struct RuleEditor: View {
             selection = locked ? r.selection : (r.pending?.selection ?? r.selection)
         } else if case .new(let kind) = target {
             plan = RulePlan(name: "", kind: kind, start: TimeOfDay(9, 0), end: TimeOfDay(17, 0),
-                            days: kind == .schedule ? [2, 3, 4, 5, 6] : Set(1...7), limitMinutes: 30)
+                            days: kind == .schedule ? [2, 3, 4, 5, 6] : Set(1...7), limitMinutes: kind == .timeout ? 20 : 30)
+        }
+    }
+
+    private var newTitle: String {
+        switch plan.kind {
+        case .schedule: String(localized: "New schedule")
+        case .limit: String(localized: "New daily limit")
+        case .timeout: String(localized: "New time-out")
         }
     }
 
@@ -102,6 +116,9 @@ struct RuleEditor: View {
         switch access {
         case .locked(let until, let reason):
             notice(icon: "lock.fill", text: AppModel.lockedMessage(until: until, reason: reason, now: model.now))
+        case .stricterOnly(let from) where plan.kind == .timeout:
+            notice(icon: "clock.arrow.circlepath",
+                   text: String(localized: "Today's time-out is locked in. A longer break or more days apply now; any other change — the minutes of use, the apps, a shorter break, deleting — starts at \(Fmt.moment(from, now: model.now))."))
         case .stricterOnly(let from):
             notice(icon: "clock.arrow.circlepath",
                    text: String(localized: "Today's limit is locked in. One stricter change a day applies now; anything else — more time, fewer apps or days, deleting, or a second change — starts at \(Fmt.moment(from, now: model.now))."))
@@ -136,12 +153,16 @@ struct RuleEditor: View {
             ForEach(RuleKind.allCases, id: \.self) { k in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
+                        let was = plan.kind
                         plan.kind = k
-                        if k == .limit && plan.days == [2, 3, 4, 5, 6] { plan.days = Set(1...7) }
+                        if k != .schedule && plan.days == [2, 3, 4, 5, 6] { plan.days = Set(1...7) }
+                        if k == .timeout && was != .timeout { plan.limitMinutes = 20 }
+                        if k == .limit && was == .timeout { plan.limitMinutes = 30 }
                     }
                 } label: {
-                    Text(k == .schedule ? "Schedule" : "Daily limit")
+                    Text(kindName(k))
                         .font(.p(15, plan.kind == k ? .semibold : .regular))
+                        .lineLimit(1).minimumScaleFactor(0.8)
                         .foregroundStyle(plan.kind == k ? Palette.night : Palette.muted)
                         .frame(maxWidth: .infinity, minHeight: 42)
                         .background(Capsule().fill(plan.kind == k ? Palette.brass : .clear))
@@ -154,11 +175,19 @@ struct RuleEditor: View {
         .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
     }
 
+    private func kindName(_ k: RuleKind) -> LocalizedStringKey {
+        switch k {
+        case .schedule: "Schedule"
+        case .limit: "Daily limit"
+        case .timeout: "Time-out"
+        }
+    }
+
     private var nameField: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Eyebrow("Name", color: Palette.muted)
-                TextField(text: $plan.name, prompt: Text(plan.kind == .schedule ? "Study, Sleep, Work…" : "Social, Games, Video…").foregroundStyle(Palette.faint)) {
+                TextField(text: $plan.name, prompt: Text(plan.kind == .schedule ? "Study, Sleep, Work…" : (plan.kind == .timeout ? "Shorts, Reels, Games…" : "Social, Games, Video…")).foregroundStyle(Palette.faint)) {
                     Text("Name")
                 }
                 .font(.p(20, .light, .title3))
@@ -184,6 +213,9 @@ struct RuleEditor: View {
                 }
                 if plan.kind == .limit {
                     Text("Time in these apps and websites adds up toward one daily limit.")
+                        .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
+                } else if plan.kind == .timeout {
+                    Text("Time in these apps and websites adds up toward each break.")
                         .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
                 } else if !selection.webDomainTokens.isEmpty {
                     Text("Websites picked here are blocked in Safari. To block a site in every browser, also add it by address below.")
@@ -314,8 +346,8 @@ struct RuleEditor: View {
                     .contentTransition(.numericText())
                 if !readOnly {
                 HStack(spacing: 14) {
-                    stepButton("minus", delta: plan.limitMinutes > 60 ? -15 : -5)
-                    stepButton("plus", delta: plan.limitMinutes >= 60 ? 15 : 5)
+                    stepButton("minus", value: $plan.limitMinutes, delta: plan.limitMinutes > 60 ? -15 : -5, range: Limits.limitMinutes)
+                    stepButton("plus", value: $plan.limitMinutes, delta: plan.limitMinutes >= 60 ? 15 : 5, range: Limits.limitMinutes)
                 }
                 }
                 DayChips(days: $plan.days)
@@ -326,9 +358,70 @@ struct RuleEditor: View {
         }
     }
 
-    private func stepButton(_ icon: String, delta: Int) -> some View {
+    private var timeoutCard: some View {
+        Card {
+            VStack(spacing: 14) {
+                Eyebrow("After this much use", color: Palette.muted)
+                Text(minutesText(plan.limitMinutes))
+                    .font(.p(44, .extraLight, .largeTitle))
+                    .foregroundStyle(Palette.ink)
+                    .contentTransition(.numericText())
+                if !readOnly {
+                HStack(spacing: 14) {
+                    stepButton("minus", value: $plan.limitMinutes, delta: plan.limitMinutes > 60 ? -15 : -5, range: Limits.timeoutUseMinutes)
+                    stepButton("plus", value: $plan.limitMinutes, delta: plan.limitMinutes >= 60 ? 15 : 5, range: Limits.timeoutUseMinutes)
+                }
+                }
+                Rectangle().fill(Palette.line).frame(height: 1).padding(.vertical, 4)
+                Eyebrow("Take a break of", color: Palette.muted)
+                Text(minutesText(plan.breakMinutes))
+                    .font(.p(44, .extraLight, .largeTitle))
+                    .foregroundStyle(Palette.ink)
+                    .contentTransition(.numericText())
+                if !readOnly {
+                HStack(spacing: 14) {
+                    stepButton("minus", value: $plan.breakMinutes, delta: -breakStep(down: true), range: Limits.breakMinutes, label: "Shorter break")
+                    stepButton("plus", value: $plan.breakMinutes, delta: breakStep(down: false), range: Limits.breakMinutes, label: "Longer break")
+                }
+                }
+                DayChips(days: $plan.days)
+                Text("After \(minutesText(plan.limitMinutes)) of use, these apps lock for \(minutesText(plan.breakMinutes)). Then they open again and the count starts over, all day.")
+                    .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// 1-minute steps for short breaks, 5 up to an hour, then 15.
+    private func breakStep(down: Bool) -> Int {
+        let m = plan.breakMinutes
+        if down { return m > 60 ? 15 : (m > 10 ? 5 : 1) }
+        return m >= 60 ? 15 : (m >= 10 ? 5 : 1)
+    }
+
+    private var strictCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: $plan.strict) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Strict lock").font(.p(17, .medium)).foregroundStyle(Palette.ink)
+                        Text(plan.strict ? "While it runs, it can't be stopped, loosened or deleted." : "You can stop it or change it any time.")
+                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
+                    }
+                }
+                .tint(Palette.brass)
+                if plan.strict && !model.state.strictLock {
+                    Text("Strict lock is off in Settings, so for now every block can be stopped.")
+                        .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.rose)
+                }
+            }
+        }
+    }
+
+    private func stepButton(_ icon: String, value: Binding<Int>, delta: Int, range: ClosedRange<Int>,
+                            label: LocalizedStringKey? = nil) -> some View {
         Button {
-            withAnimation { plan.limitMinutes = min(max(plan.limitMinutes + delta, Limits.limitMinutes.lowerBound), Limits.limitMinutes.upperBound) }
+            withAnimation { value.wrappedValue = min(max(value.wrappedValue + delta, range.lowerBound), range.upperBound) }
         } label: {
             Image(systemName: icon).font(.system(size: 18, weight: .light)).foregroundStyle(Palette.ink)
                 .frame(width: 56, height: 44)
@@ -336,7 +429,7 @@ struct RuleEditor: View {
                 .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(delta < 0 ? "Less time" : "More time"))
+        .accessibilityLabel(Text(label ?? (delta < 0 ? "Less time" : "More time")))
     }
 
     private var deleteButton: some View {
@@ -378,7 +471,7 @@ struct RuleEditor: View {
         switch outcome {
         case .saved: dismiss()
         case .scheduled(let at):
-            model.toast = String(localized: "Saved. It takes effect at \(Fmt.moment(at, now: model.now)) — today's limit stays as it was.")
+            model.toast = String(localized: "Saved. It takes effect at \(Fmt.moment(at, now: model.now)). Until then the current version runs.")
             dismiss()
         case .refused(let why): model.problem = why
         }

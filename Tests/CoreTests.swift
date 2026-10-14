@@ -263,6 +263,79 @@ struct CoreTests {
             }
         }
 
+        // 1.0.2: time-outs
+        let shorts = RulePlan(name: "Shorts", kind: .timeout, days: [2, 3, 4, 5, 6], limitMinutes: 20, breakMinutes: 10)
+        check(Status.of(shorts, now: monNoon, reachedAt: nil, calendar: seoul) == .counting, "time-out counts on its days")
+        let breakEnd = date("2026-10-12 12:06", seoul)
+        check(Status.of(shorts, now: monNoon, reachedAt: nil, breakUntil: breakEnd, calendar: seoul) == .onBreak(until: breakEnd),
+              "time-out on a break blocks until the break ends")
+        check(Status.of(shorts, now: date("2026-10-12 12:07", seoul), reachedAt: nil, breakUntil: breakEnd, calendar: seoul) == .counting,
+              "after the break it counts again")
+        check(Status.of(shorts, now: date("2026-10-11 12:00", seoul), reachedAt: nil, calendar: seoul) == .resting, "not on Sunday")
+        check(Status.of(shorts, now: monNoon, reachedAt: monNoon, calendar: seoul) == .counting, "a time-out is never 'used up'")
+        check(Validate.problems(shorts, appCount: 2, hasSelection: true).isEmpty, "20 min use / 10 min break is valid")
+        var noApps = shorts; noApps.name = "X"
+        check(Validate.problems(noApps, appCount: 0, hasSelection: false).contains(.nothingChosen), "time-out needs apps")
+        var longBreak = shorts; longBreak.breakMinutes = 121
+        check(Validate.problems(longBreak, appCount: 1, hasSelection: true).contains(.limitOutOfRange), "break over 2 h is refused")
+        var shortUse = shorts; shortUse.limitMinutes = 4
+        check(Validate.problems(shortUse, appCount: 1, hasSelection: true).contains(.limitOutOfRange), "use under 5 min is refused")
+        var moreUse = shorts; moreUse.limitMinutes = 30
+        check(Change.direction(from: shorts, to: moreUse) == .looser, "more use before a break is looser")
+        var shorterBreak = shorts; shorterBreak.breakMinutes = 5
+        check(Change.direction(from: shorts, to: shorterBreak) == .looser, "a shorter break is looser")
+        var longerBreak = shorts; longerBreak.breakMinutes = 15
+        check(Change.direction(from: shorts, to: longerBreak) == .stricter, "a longer break is stricter")
+        check(Policy.access(status: .onBreak(until: breakEnd), lockInUntil: nil, now: monNoon, calendar: seoul)
+              == .locked(until: breakEnd, reason: .onBreak), "a strict time-out is read-only during its break")
+        check(Policy.access(status: .counting, lockInUntil: nil, now: monNoon, calendar: seoul)
+              == .stricterOnly(loosenFrom: date("2026-10-13 00:00", seoul)), "a counting strict time-out takes stricter changes only")
+
+        // 1.0.2: Strict lock
+        let running = RuleStatus.running(until: date("2026-10-12 17:00", seoul))
+        check(Policy.access(status: running, lockInUntil: nil, strict: false, now: monNoon, calendar: seoul) == .free,
+              "a running block without Strict lock can be changed")
+        check(Policy.access(status: .reached(until: date("2026-10-13 00:00", seoul)), lockInUntil: nil, strict: false, now: monNoon,
+                            calendar: seoul) == .free, "a used-up limit without Strict lock can be changed")
+        let lockInEnd = date("2026-10-15 00:00", seoul)
+        if case .locked(let until, .lockIn) = Policy.access(status: running, lockInUntil: lockInEnd, strict: false, now: monNoon, calendar: seoul) {
+            check(until == lockInEnd, "lock-in holds even blocks without Strict lock")
+        } else { check(false, "lock-in holds even blocks without Strict lock") }
+        var relaxed = work; relaxed.strict = false
+        check(Change.direction(from: work, to: relaxed) == .looser, "switching Strict lock off is looser")
+        check(Change.direction(from: relaxed, to: work) == .stricter, "switching Strict lock on is stricter")
+
+        // 1.0.2: stopping a block that isn't strict
+        let five = date("2026-10-12 17:00", seoul)
+        check(Status.of(work, now: monNoon, reachedAt: nil, stoppedUntil: five, calendar: seoul) == .stopped(until: five),
+              "a stopped schedule stays off until its window ends")
+        check(Status.of(work, now: date("2026-10-13 10:00", seoul), reachedAt: nil, stoppedUntil: five, calendar: seoul)
+              == .running(until: date("2026-10-13 17:00", seoul)), "it runs again in the next window")
+        check(Status.of(work, now: monNoon, reachedAt: nil, stoppedUntil: date("2026-10-12 13:00", seoul), calendar: seoul) == running,
+              "a stop that ends before the block does not hide it")
+        check(Status.of(shorts, now: monNoon, reachedAt: nil, breakUntil: breakEnd, stoppedUntil: breakEnd, calendar: seoul) == .stopped(until: breakEnd),
+              "an ended break shows as stopped")
+        check(!RuleStatus.stopped(until: five).isBlocking, "a stopped block doesn't block")
+
+        // 1.0.2: older saved plans (no breakMinutes / strict) still load, as strict
+        let old = #"{"name":"Social","kind":"limit","isOn":true,"start":{"hour":9,"minute":0},"end":{"hour":17,"minute":0},"days":[1,2,3,4,5,6,7],"limitMinutes":30}"#
+        if let p = try? JSONDecoder().decode(RulePlan.self, from: Data(old.utf8)) {
+            check(p.strict && p.breakMinutes == 10 && p.domains.isEmpty && p.limitMinutes == 30, "1.0.1 plan decodes as strict")
+        } else { check(false, "1.0.1 plan decodes") }
+        if let back = try? JSONDecoder().decode(RulePlan.self, from: JSONEncoder().encode(shorts)) {
+            check(back == shorts, "time-out round-trips")
+        } else { check(false, "time-out round-trips") }
+
+        // 1.0.2: capacity — a time-out needs two monitors
+        let limitPlan = RulePlan(name: "L", kind: .limit, limitMinutes: 30)
+        check(Capacity.fits(Array(repeating: limitPlan, count: 18)), "18 limits fit")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 19)), "19 don't")
+        check(Capacity.fits(Array(repeating: shorts, count: 9)), "9 time-outs fit")
+        check(!Capacity.fits(Array(repeating: shorts, count: 10)), "10 time-outs don't")
+        var offShorts = shorts; offShorts.isOn = false
+        check(Capacity.fits(Array(repeating: shorts, count: 9) + [offShorts]), "a switched-off time-out needs no monitor")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 18) + [offShorts]), "but every block keeps a slot (18 max)")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

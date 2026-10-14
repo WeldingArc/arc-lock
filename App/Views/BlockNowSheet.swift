@@ -1,7 +1,7 @@
 import FamilyControls
 import SwiftUI
 
-/// Block chosen apps right away for a fixed time. Once started it can't be stopped.
+/// Block chosen apps right away for a fixed time. With Strict lock (the default) it can't be stopped once started.
 struct BlockNowSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +9,8 @@ struct BlockNowSheet: View {
     @State private var minutes = 60
     @State private var showPicker = false
     @State private var confirm = false
+    @State private var strict = true
+    private var stoppable: Bool { !strict || !model.strictLockActive }
     private let presets = [15, 30, 60, 120, 240]
     private var overCap: Bool {
         selection.applicationTokens.count > Limits.maxApps || selection.webDomainTokens.count > Limits.maxDomains
@@ -62,9 +64,22 @@ struct BlockNowSheet: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
-                        Text("Once it starts, it can't be stopped from Arc Lock, by deleting apps, or by changing the clock.")
-                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
-                            .padding(.horizontal, 8)
+                        Card {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Toggle(isOn: $strict) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Strict lock").font(.p(17, .medium)).foregroundStyle(Palette.ink)
+                                        Text(strict ? "Once it starts, it can't be stopped." : "You can stop it from Home any time.")
+                                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
+                                    }
+                                }
+                                .tint(Palette.brass)
+                                if strict && !model.strictLockActive {
+                                    Text("Strict lock is off in Settings, so for now it can be stopped.")
+                                        .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.rose)
+                                }
+                            }
+                        }
                         Button("Start") { confirm = true }
                             .buttonStyle(BrassButton())
                             .disabled(selection.isEmpty || overCap)
@@ -81,7 +96,7 @@ struct BlockNowSheet: View {
             }
             .familyActivityPicker(headerText: String(localized: "Choose what to block right now."), isPresented: $showPicker, selection: $selection)
             .confirmationDialog(Text("Block for \(minutesText(minutes))?"), isPresented: $confirm, titleVisibility: .visible) {
-                Button("Start — can't be stopped") { start() }
+                Button(stoppable ? "Start" : "Start — can't be stopped") { start() }
             } message: {
                 Text("Locked until \(Fmt.moment(model.now.addingTimeInterval(TimeInterval(minutes * 60)), now: model.now)).")
             }
@@ -94,7 +109,7 @@ struct BlockNowSheet: View {
     }
 
     private func start() {
-        switch model.startSession(selection: selection, domains: [], minutes: minutes) {
+        switch model.startSession(selection: selection, domains: [], minutes: minutes, strict: strict) {
         case .refused(let why): model.problem = why
         default: dismiss()
         }

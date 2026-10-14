@@ -11,12 +11,13 @@ struct SettingsView: View {
                 Backdrop()
                 ScrollView {
                     VStack(spacing: 18) {
+                        strictCard
                         protectionCard
                         Card {
                             Toggle(isOn: Binding(get: { model.state.headsUp }, set: { model.setHeadsUp($0) })) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Heads-up notifications").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                                    Text("5 minutes before a block starts or a limit of 10 minutes or more runs out").font(.p(14, .regular)).foregroundStyle(Palette.muted)
+                                    Text("Before a block starts, a daily limit runs out, or a time-out's break begins").font(.p(14, .regular)).foregroundStyle(Palette.muted)
                                 }
                             }
                             .tint(Palette.brass)
@@ -40,6 +41,41 @@ struct SettingsView: View {
         #endif
     }
 
+    private var strictCard: some View {
+        Card(glow: model.state.strictLock) {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(get: { model.state.strictLock && model.state.strictLockOffAt == nil },
+                                     set: { on in
+                                         switch model.setStrictLock(on) {
+                                         case .refused(let why): model.problem = why
+                                         case .scheduled(let at): model.toast = String(localized: "Strict lock turns off at \(Fmt.moment(at, now: model.now)).")
+                                         case .saved: break
+                                         }
+                                     })) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Strict lock").font(.p(17, .regular)).foregroundStyle(Palette.ink)
+                        Text(model.state.strictLock
+                             ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off takes effect at midnight, after any strict block running then has ended."
+                             : "Off: every block can be stopped or changed any time. Lock-in needs it on.")
+                            .font(.p(14, .regular)).foregroundStyle(Palette.muted)
+                    }
+                }
+                .tint(Palette.brass)
+                if model.state.strictLock, let off = model.state.strictLockOffAt {
+                    let at = model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off
+                    HStack {
+                        Text(at <= model.now ? String(localized: "Turns off when the strict blocks running now end")
+                                             : String(localized: "Turns off at \(Fmt.moment(at, now: model.now))"))
+                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
+                        Spacer()
+                        Button("Keep it on") { _ = model.setStrictLock(true) }
+                            .font(.p(14, .medium)).foregroundStyle(Palette.brass)
+                    }
+                }
+            }
+        }
+    }
+
     private var protectionCard: some View {
         Card(glow: model.state.deletionProtection) {
             VStack(alignment: .leading, spacing: 10) {
@@ -53,7 +89,9 @@ struct SettingsView: View {
                                      })) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Deletion protection").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                        Text("No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight.")
+                        Text(model.state.strictLock
+                             ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight."
+                             : "No app can be deleted from this iPhone, Arc Lock included.")
                             .font(.p(14, .regular)).foregroundStyle(Palette.muted)
                     }
                 }
@@ -137,6 +175,10 @@ struct LockInSheet: View {
                             }
                         }
                         Text("Through \(Fmt.lastDay(endingAt: end))").font(.p(20, .light)).foregroundStyle(Palette.ink)
+                        if !model.state.strictLock || model.state.strictLockOffAt != nil {
+                            Text("Lock-in needs Strict lock. Turn it on in Settings first.")
+                                .font(.p(14, .regular)).foregroundStyle(Palette.rose).multilineTextAlignment(.center)
+                        }
                         Card {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Type \(word) to confirm").font(.p(14, .regular)).foregroundStyle(Palette.muted)

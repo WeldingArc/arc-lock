@@ -8,7 +8,8 @@ import ManagedSettings
 import UserNotifications
 
 enum Shielding {
-    static func apply(_ selection: FamilyActivitySelection, domains: [String], to name: ManagedSettingsStore.Name) {
+    /// `hold` = a strict block: also stop app deletion and manual clock changes while it shields.
+    static func apply(_ selection: FamilyActivitySelection, domains: [String], to name: ManagedSettingsStore.Name, hold: Bool = true) {
         let store = ManagedSettingsStore(named: name)
         let apps = selection.applicationTokens, cats = selection.categoryTokens, webs = selection.webDomainTokens
         store.shield.applications = apps.isEmpty ? nil : apps
@@ -17,7 +18,12 @@ enum Shielding {
         store.shield.webDomainCategories = cats.isEmpty ? nil : .specific(cats)
         let typed = Set(domains.map { WebDomain(domain: $0) })
         store.webContent.blockedByFilter = typed.isEmpty ? nil : .specific(typed)
-        holdDevice(store)
+        if hold {
+            holdDevice(store)
+        } else {
+            store.application.denyAppRemoval = nil
+            store.dateAndTime.requireAutomaticDateAndTime = nil
+        }
     }
 
     /// No deleting apps (including Arc Lock) and no setting the clock by hand.
@@ -86,6 +92,15 @@ enum Monitoring {
                         registration: Registration(kind: .limit, start: TimeOfDay(0, 0), end: TimeOfDay(23, 59), limit: p.limitMinutes,
                                                    thresholds: thresholds, creditDay: credit > 0 ? calendar.startOfDay(for: now) : nil,
                                                    selection: rule.selection))
+        case .timeout:
+            // one threshold: the use allowed before a break, counted from registration (re-registered after each break)
+            let schedule = DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
+                                                  intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true,
+                                                  warningTime: p.limitMinutes >= 3 ? DateComponents(minute: 1) : nil)
+            return Plan(schedule: schedule, events: [Names.limitEvent: event(rule.selection, minutes: p.limitMinutes)],
+                        registration: Registration(kind: .timeout, start: TimeOfDay(0, 0), end: TimeOfDay(23, 59), limit: p.limitMinutes,
+                                                   thresholds: [Names.limitEvent.rawValue: p.limitMinutes], creditDay: nil,
+                                                   selection: rule.selection))
         }
     }
 
@@ -125,7 +140,10 @@ enum Monitoring {
         for rule in state.rules where rule.plan.isOn { wanted[Names.activity(rule.id)] = (rule, plan(for: rule, now: now)) }
 
         let have = Set(center.activities)
-        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil }
+        // a running break keeps its own monitor (its end lifts the break); anything else not wanted goes
+        let liveBreaks = Set(state.rules.filter { $0.plan.isOn && $0.plan.kind == .timeout && (Breaks.until($0.id) ?? .distantPast) > now }
+            .map { Names.breakActivity($0.id) })
+        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0) }
         if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
 
         for (name, (rule, p)) in wanted {
@@ -149,7 +167,7 @@ enum Monitoring {
     /// After iOS reported a limit too early (and so won't report it again today), restart the count with what
     /// today's marks prove was used. At most 3 times a day, so a device that misfires every time can't loop.
     static func rearm(_ rule: Rule, state: ArcState, now: Date = Date(), calendar: Calendar = .current) {
-        let key = "rearm.\(rule.id.uuidString)"
+        let key = rearmKey(rule.id)
         let today = calendar.startOfDay(for: now)
         var count = 0
         if let d = AppGroup.defaults.object(forKey: key + ".day") as? Date, calendar.isDate(d, inSameDayAs: now) {
@@ -161,6 +179,46 @@ enum Monitoring {
         let used = LimitMath.usedAtLeast(level: Marks.level(rule.id, now: now, calendar: calendar), limit: rule.plan.limitMinutes)
         Credits.set(rule.id, minutes: max(used, Credits.today(rule.id, now: now, calendar: calendar)), now: now, calendar: calendar)
         sync(state, now: now, force: [rule.id])
+    }
+
+    private static func rearmKey(_ id: UUID) -> String { "rearm.\(id.uuidString)" }
+    /// A time-out re-registers after every break, so each stretch of use gets its own budget of 3 re-arms.
+    static func resetRearms(_ id: UUID) {
+        AppGroup.defaults.removeObject(forKey: rearmKey(id))
+        AppGroup.defaults.removeObject(forKey: rearmKey(id) + ".day")
+    }
+
+    /// Starts a time-out's break: shields until `now + breakMinutes`, with a one-off monitor whose end lifts the break.
+    /// iOS wants monitors of at least 15 minutes, so a shorter break's monitor starts in the past.
+    static func startBreak(_ rule: Rule, now: Date = Date(), calendar: Calendar = .current) {
+        let end = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
+        Breaks.set(rule.id, until: end)
+        Stops.clear(rule.id)          // a stop belonged to an earlier break; this one blocks
+        let start = min(now.addingTimeInterval(-60), end.addingTimeInterval(-16 * 60))
+        let comps: Set<Calendar.Component> = [.hour, .minute, .second]
+        let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(comps, from: start),
+                                              intervalEnd: calendar.dateComponents(comps, from: end), repeats: false)
+        let center = DeviceActivityCenter()
+        center.stopMonitoring([Names.breakActivity(rule.id)])
+        try? center.startMonitoring(Names.breakActivity(rule.id), during: schedule)
+    }
+
+    /// Ends breaks whose time is up and restarts their count from now, so the next break comes after the full use
+    /// time again. Safe to call from any callback or when the app opens (a missed break-end heals here). `slack`
+    /// also ends breaks that are due within that time (a break monitor's end can come a moment early); the count
+    /// still restarts at the real `now`, which the next threshold's plausibility check measures from.
+    @discardableResult
+    static func finishBreaks(_ state: ArcState, now: Date = Date(), slack: TimeInterval = 0) -> Bool {
+        let due = now.addingTimeInterval(slack)
+        let done = state.rules.filter { $0.plan.kind == .timeout && (Breaks.until($0.id).map { $0 <= due } ?? false) }
+        guard !done.isEmpty else { return false }
+        for r in done {
+            Breaks.clear(r.id)
+            resetRearms(r.id)
+        }
+        DeviceActivityCenter().stopMonitoring(done.map { Names.breakActivity($0.id) })
+        sync(state, now: now, force: Set(done.filter(\.plan.isOn).map(\.id)))
+        return true
     }
 
     /// One-off monitor whose end lifts a Block-now session even if the app is never opened again. The start is a
@@ -191,26 +249,31 @@ enum Engine {
             }
             if skip.contains(rule.id) { continue }
             if isBlocking(rule, now: now, calendar: calendar) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name)
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name, hold: state.isStrict(rule.plan, now: now))
             } else {
                 Shielding.clear(name)
             }
         }
         let sessionOn = state.session.map { $0.endsAt.timeIntervalSince(now) > edge && $0.startedAt <= now.addingTimeInterval(edge) } ?? false
         if let s = state.session, sessionOn {
-            Shielding.apply(s.selection, domains: s.domains, to: Names.sessionStore)
+            Shielding.apply(s.selection, domains: s.domains, to: Names.sessionStore, hold: state.isStrict(s, now: now))
         } else {
             Shielding.clear(Names.sessionStore)
         }
         let lockIn = (state.lockInUntil?.timeIntervalSince(now) ?? 0) > edge
         Shielding.setLockIn(lockIn)
-        Shielding.holdClock(lockIn || sessionOn || state.rules.contains { $0.plan.isOn || $0.pending != nil })
+        let strictSession = sessionOn && (state.session.map { state.isStrict($0, now: now) } ?? false)
+        Shielding.holdClock(lockIn || strictSession
+                            || state.rules.contains { ($0.plan.isOn && state.isStrict($0.plan, now: now)) || $0.pending != nil })
         Shielding.guardDeletion(state.onboarded && state.deletionProtection)
     }
 
     /// Whether a rule should shield at `now` (see `edge`).
     static func isBlocking(_ rule: Rule, now: Date, calendar: Calendar = .current) -> Bool {
-        let status = Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), calendar: calendar)
+        let status = Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), breakUntil: Breaks.until(rule.id),
+                               stoppedUntil: Stops.until(rule.id), calendar: calendar)
+        // A break can be as short as a minute, so no edge here: `finishBreaks` ends it (allowing for an early callback).
+        if case .onBreak(let until) = status { return until > now }
         if let until = status.blockingUntil { return until.timeIntervalSince(now) > edge }
         if case .waiting(let next?) = status, next.timeIntervalSince(now) <= edge { return true }
         return false
@@ -231,13 +294,18 @@ enum Engine {
                 s.deletionProtection = false
                 s.deletionProtectionOffAt = nil
             }
+            // never under a running strict block or session: it waits until they end (a promise made when they started)
+            if let off = s.strictLockOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now, !strictRunning(s, now: now) {
+                s.strictLock = false
+                s.strictLockOffAt = nil
+            }
             if let sess = s.session, sess.endsAt <= now { s.session = nil }
             return Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil)
         }
         var probe = st
         let due = tidy(&probe)
         guard !due.isEmpty || probe.session != st.session || probe.lockInUntil != st.lockInUntil
-              || probe.deletionProtection != st.deletionProtection else { return (st, false) }
+              || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock else { return (st, false) }
         st = StateStore.update { fresh in
             let ids = tidy(&fresh)
             for id in ids {
@@ -248,6 +316,8 @@ enum Engine {
                 guard !fresh.rules.contains(where: { $0.id == id }) else { continue }
                 if let slot = fresh.slot(of: id) { Shielding.clear(Names.store(slot: slot)) }
                 Restarts.clear(id)
+                Breaks.clear(id)
+                Stops.clear(id)
                 Monitoring.forget(id)
             }
             fresh.assignSlots()
@@ -255,9 +325,15 @@ enum Engine {
         return (st, true)
     }
 
-    /// Whether `now` falls on a day this limit counts.
+    /// Whether a block or Block-now session with Strict lock is blocking at `now`.
+    static func strictRunning(_ s: ArcState, now: Date, calendar: Calendar = .current) -> Bool {
+        if let sess = s.session, sess.endsAt.timeIntervalSince(now) > edge, s.isStrict(sess, now: now) { return true }
+        return s.rules.contains { $0.plan.isOn && s.isStrict($0.plan, now: now) && isBlocking($0, now: now, calendar: calendar) }
+    }
+
+    /// Whether `now` falls on a day this limit or time-out counts.
     static func counts(_ rule: Rule, now: Date, calendar: Calendar = .current) -> Bool {
-        rule.plan.isOn && rule.plan.kind == .limit && rule.plan.days.contains(calendar.component(.weekday, from: now))
+        rule.plan.isOn && rule.plan.kind.countsUse && rule.plan.days.contains(calendar.component(.weekday, from: now))
     }
 }
 

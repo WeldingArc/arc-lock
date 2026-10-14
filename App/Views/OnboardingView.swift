@@ -63,7 +63,8 @@ struct OnboardingView: View {
             VStack(spacing: 26) {
                 feature("calendar.badge.clock", "Schedules", "Pick apps and websites and the hours they stay locked.")
                 feature("hourglass", "Daily limits", "After the time you allow, they lock until midnight.")
-                feature("lock.fill", "No early exit", "A running block can't be stopped, and Arc Lock can't be deleted.")
+                feature("cup.and.saucer", "Time-outs", "After a stretch of use, a short break. Then they open again.")
+                feature("lock.fill", "Strict lock", "A strict block can't be stopped while it runs, and Arc Lock can't be deleted.")
             }
             .padding(.top, 8)
         }, button: "Continue", action: { page = 2 })
@@ -104,7 +105,7 @@ struct OnboardingView: View {
         screen(content: {
             Image(systemName: "bell.badge").font(.system(size: 58, weight: .ultraLight)).foregroundStyle(Palette.brass)
             Text("Get a heads-up").font(.p(30, .light, .title)).foregroundStyle(Palette.ink)
-            Text("A quiet notice 5 minutes before a block starts or a daily limit runs out.")
+            Text("A quiet notice before a block starts, a daily limit runs out, or a break begins.")
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
         }, button: "Allow notifications", secondary: "Not now", action: {
             Task {

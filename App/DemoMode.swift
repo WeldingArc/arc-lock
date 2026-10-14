@@ -1,5 +1,5 @@
 // Debug builds only: sample blocks for screenshots and UI checks in the simulator, without touching Screen Time.
-//   xcrun simctl launch booted io.github.weldingarc.arclock -demo YES -shot home|editor|limit|blocknow|settings|lockin|guide|onboarding
+//   xcrun simctl launch booted io.github.weldingarc.arclock -demo YES -shot home|editor|limit|timeout|timeouts|blocknow|settings|lockin|guide|onboarding
 #if DEBUG
 import FamilyControls
 import Foundation
@@ -22,6 +22,7 @@ enum Demo {
     static let sleep = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     static let social = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
     static let games = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
+    static let shorts = UUID(uuidString: "00000000-0000-0000-0000-000000000005")!
 
     static func state() -> ArcState {
         var s = ArcState()
@@ -36,6 +37,9 @@ enum Demo {
             Rule(id: social, plan: RulePlan(name: "Social", kind: .limit, days: Set(1...7), limitMinutes: 30),
                  selection: FamilyActivitySelection()),
             Rule(id: games, plan: RulePlan(name: "Games", kind: .limit, days: [2, 3, 4, 5, 6], limitMinutes: 45),
+                 selection: FamilyActivitySelection()),
+            Rule(id: shorts, plan: RulePlan(name: "Shorts", kind: .timeout, days: Set(1...7), limitMinutes: 20,
+                                            breakMinutes: 10, strict: false),
                  selection: FamilyActivitySelection()),
         ]
         if shot == "session" {
@@ -52,11 +56,20 @@ enum Demo {
         case "Sleep": return [("play.rectangle.fill", 0.0), ("music.note", 0.95), ("gamecontroller.fill", 0.75)]
         case "Social": return [("camera.fill", 0.85), ("bubble.left.and.bubble.right.fill", 0.58), ("at", 0.6), ("person.2.fill", 0.12)]
         case "Games": return [("gamecontroller.fill", 0.75), ("dice.fill", 0.33)]
+        case "Shorts": return [("play.rectangle.fill", 0.0), ("music.note", 0.95), ("camera.fill", 0.85)]
         default: return []
         }
     }
 
     static func reachedAt(_ id: UUID) -> Date? { id == games ? now.addingTimeInterval(-1800) : nil }
     static func level(_ id: UUID) -> Int { id == social ? 5 : id == games ? 10 : 0 }
+    static func breakUntil(_ id: UUID) -> Date? { id == shorts ? now.addingTimeInterval(6 * 60) : nil }
+    static func usage(_ id: UUID) -> UsageSummary {
+        switch id {
+        case social: UsageSummary(minutes: 17, limit: 30)
+        case games: UsageSummary(minutes: 45, limit: 45)
+        default: UsageSummary(minutes: 48)
+        }
+    }
 }
 #endif

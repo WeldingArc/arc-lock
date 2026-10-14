@@ -14,7 +14,13 @@ public struct TimeOfDay: Codable, Hashable, Comparable, Sendable {
     public static func < (a: TimeOfDay, b: TimeOfDay) -> Bool { a.minutes < b.minutes }
 }
 
-public enum RuleKind: String, Codable, CaseIterable, Sendable { case schedule, limit }
+public enum RuleKind: String, Codable, CaseIterable, Sendable {
+    case schedule, limit
+    /// After `limitMinutes` of use the apps take a break of `breakMinutes`, then unlock; repeats all day.
+    case timeout
+    /// Kinds that count use (a monitor with a usage threshold) rather than following the clock.
+    public var countsUse: Bool { self != .schedule }
+}
 
 /// Everything about a block except the chosen apps (Apple's opaque tokens live next to it, in the app).
 public struct RulePlan: Codable, Hashable, Sendable {
@@ -28,12 +34,37 @@ public struct RulePlan: Codable, Hashable, Sendable {
     public var limitMinutes: Int
     /// Websites typed by address (schedules only — Screen Time can't measure time spent on them).
     public var domains: [String]
+    /// Time-outs: how long each break lasts.
+    public var breakMinutes: Int
+    /// Strict lock: while it runs this block can't be stopped or loosened (if Strict lock is on in Settings).
+    public var strict: Bool
 
     public init(name: String = "", kind: RuleKind = .schedule, isOn: Bool = true,
                 start: TimeOfDay = TimeOfDay(9, 0), end: TimeOfDay = TimeOfDay(17, 0),
-                days: Set<Int> = Set(1...7), limitMinutes: Int = 30, domains: [String] = []) {
+                days: Set<Int> = Set(1...7), limitMinutes: Int = 30, domains: [String] = [],
+                breakMinutes: Int = 10, strict: Bool = true) {
         self.name = name; self.kind = kind; self.isOn = isOn; self.start = start; self.end = end
         self.days = days; self.limitMinutes = limitMinutes; self.domains = domains
+        self.breakMinutes = breakMinutes; self.strict = strict
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, kind, isOn, start, end, days, limitMinutes, domains, breakMinutes, strict
+    }
+
+    /// Fields added in later versions fall back to their defaults, so saved blocks always load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        kind = try c.decode(RuleKind.self, forKey: .kind)
+        isOn = try c.decode(Bool.self, forKey: .isOn)
+        start = try c.decode(TimeOfDay.self, forKey: .start)
+        end = try c.decode(TimeOfDay.self, forKey: .end)
+        days = try c.decode(Set<Int>.self, forKey: .days)
+        limitMinutes = try c.decode(Int.self, forKey: .limitMinutes)
+        domains = (try? c.decode([String].self, forKey: .domains)) ?? []
+        breakMinutes = (try? c.decode(Int.self, forKey: .breakMinutes)) ?? 10
+        strict = (try? c.decode(Bool.self, forKey: .strict)) ?? true
     }
 }
 
@@ -41,6 +72,9 @@ public enum Limits {
     /// DeviceActivity refuses schedules shorter than 15 minutes.
     public static let minimumWindowMinutes = 15
     public static let limitMinutes = 5...480
+    /// Time-outs: use allowed before a break, and the break itself.
+    public static let timeoutUseMinutes = 5...240
+    public static let breakMinutes = 1...120
     public static let sessionMinutes = 15...(12 * 60)
     /// A schedule must leave time between windows, or it could never be changed again. 22 h leaves a 2-hour gap,
     /// which is still at least an hour on the day the clocks spring forward.
@@ -127,20 +161,38 @@ public enum RuleStatus: Equatable, Sendable {
     /// A daily limit on a day that isn't selected.
     case resting
     case reached(until: Date)
+    /// A time-out on its break.
+    case onBreak(until: Date)
+    /// A block that is not strict, stopped by hand until `until` (when it would have ended anyway).
+    case stopped(until: Date)
 
     public var isBlocking: Bool {
-        switch self { case .running, .reached: return true; default: return false }
+        switch self { case .running, .reached, .onBreak: return true; default: return false }
     }
     public var blockingUntil: Date? {
-        switch self { case .running(let u), .reached(let u): return u; default: return nil }
+        switch self { case .running(let u), .reached(let u), .onBreak(let u): return u; default: return nil }
     }
 }
 
 public enum Status {
-    /// `reachedAt` is when the monitor extension last saw this limit's threshold.
-    public static func of(_ plan: RulePlan, now: Date, reachedAt: Date?, calendar: Calendar) -> RuleStatus {
+    /// `reachedAt` is when the monitor extension last saw this limit's threshold, `breakUntil` when a time-out's
+    /// current break ends, `stoppedUntil` until when a non-strict block was stopped by hand.
+    public static func of(_ plan: RulePlan, now: Date, reachedAt: Date?, breakUntil: Date? = nil,
+                          stoppedUntil: Date? = nil, calendar: Calendar) -> RuleStatus {
+        let s = raw(plan, now: now, reachedAt: reachedAt, breakUntil: breakUntil, calendar: calendar)
+        if let until = s.blockingUntil, let stop = stoppedUntil, stop > now, stop >= until.addingTimeInterval(-1) {
+            return .stopped(until: until)
+        }
+        return s
+    }
+
+    static func raw(_ plan: RulePlan, now: Date, reachedAt: Date?, breakUntil: Date?, calendar: Calendar) -> RuleStatus {
         guard plan.isOn else { return .off }
         switch plan.kind {
+        case .timeout:
+            guard plan.days.contains(calendar.component(.weekday, from: now)) else { return .resting }
+            if let b = breakUntil, b > now { return .onBreak(until: b) }
+            return .counting
         case .schedule:
             if let w = ScheduleMath.window(containing: now, plan: plan, calendar: calendar) { return .running(until: w.end) }
             return .waiting(next: ScheduleMath.nextWindow(after: now, plan: plan, calendar: calendar)?.start)
@@ -156,7 +208,7 @@ public enum Status {
 
 // MARK: - What may change when
 
-public enum LockReason: String, Codable, Sendable { case running, reached, session, lockIn }
+public enum LockReason: String, Codable, Sendable { case running, reached, session, lockIn, onBreak }
 
 public enum EditAccess: Equatable, Sendable {
     /// Any change applies now.
@@ -168,11 +220,17 @@ public enum EditAccess: Equatable, Sendable {
 }
 
 public enum Policy {
-    public static func access(status: RuleStatus, lockInUntil: Date?, now: Date, calendar: Calendar) -> EditAccess {
+    /// `strict` = this block's Strict lock and the global Strict lock are both on. A lock-in freezes every block,
+    /// strict or not; otherwise a block that isn't strict can always be changed, stopped or deleted.
+    public static func access(status: RuleStatus, lockInUntil: Date?, strict: Bool = true, now: Date,
+                              calendar: Calendar) -> EditAccess {
+        let lockIn = lockInActive(lockInUntil, now: now)
+        if !strict && !lockIn { return .free }
         var lock: (Date, LockReason)?
         switch status {
         case .running(let u): lock = (u, .running)
         case .reached(let u): lock = (u, .reached)
+        case .onBreak(let u): lock = (u, .onBreak)
         default: break
         }
         if let l = lockInUntil, l > now, l > (lock?.0 ?? .distantPast) { lock = (l, .lockIn) }
@@ -196,6 +254,8 @@ public enum Change {
         var looser = selectionLost, stricter = selectionGained
         if old.isOn && !new.isOn { looser = true }
         if !old.isOn && new.isOn { stricter = true }
+        if old.strict && !new.strict { looser = true }
+        if !old.strict && new.strict { stricter = true }
         if !new.days.isSuperset(of: old.days) { looser = true }
         if !old.days.isSuperset(of: new.days) { stricter = true }
         let oldDomains = Set(old.domains), newDomains = Set(new.domains)
@@ -205,6 +265,10 @@ public enum Change {
         case .limit:
             if new.limitMinutes > old.limitMinutes { looser = true }
             if new.limitMinutes < old.limitMinutes { stricter = true }
+        case .timeout:
+            // more use before a break, or a shorter break, is looser
+            if new.limitMinutes > old.limitMinutes || new.breakMinutes < old.breakMinutes { looser = true }
+            if new.limitMinutes < old.limitMinutes || new.breakMinutes > old.breakMinutes { stricter = true }
         case .schedule:
             if new.start != old.start || new.end != old.end {
                 // a window that covers the old one is stricter; anything else frees some time
@@ -235,7 +299,7 @@ public enum Validate {
     public static func problems(_ plan: RulePlan, appCount: Int, hasSelection: Bool, webTokenCount: Int = 0) -> [PlanProblem] {
         var out: [PlanProblem] = []
         if plan.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append(.noName) }
-        if !hasSelection && (plan.kind == .limit || plan.domains.isEmpty) { out.append(.nothingChosen) }
+        if !hasSelection && (plan.kind.countsUse || plan.domains.isEmpty) { out.append(.nothingChosen) }
         if plan.days.isEmpty { out.append(.noDays) }
         switch plan.kind {
         case .schedule:
@@ -244,6 +308,10 @@ public enum Validate {
             if length > Limits.maxWindowMinutes { out.append(.windowTooLong) }
         case .limit:
             if !Limits.limitMinutes.contains(plan.limitMinutes) { out.append(.limitOutOfRange) }
+        case .timeout:
+            if !Limits.timeoutUseMinutes.contains(plan.limitMinutes) || !Limits.breakMinutes.contains(plan.breakMinutes) {
+                out.append(.limitOutOfRange)
+            }
         }
         // iOS silently shields nothing when a set holds more than 50 tokens
         if appCount > Limits.maxApps { out.append(.tooManyApps) }
@@ -343,9 +411,16 @@ public enum Pending {
 
 /// How many DeviceActivity monitors a set of rules needs (one per rule that is switched on).
 public enum Capacity {
-    public static func activities(for plans: [RulePlan]) -> Int { plans.filter(\.isOn).count }
-    /// Rules that may be switched on, and rules that may exist at all (each keeps one store slot).
+    /// DeviceActivity monitors the blocks need: one each, plus one more for a time-out's break.
+    public static func activities(for plans: [RulePlan]) -> Int {
+        plans.filter(\.isOn).reduce(0) { $0 + ($1.kind == .timeout ? 2 : 1) }
+    }
+    /// Rules that may exist at all (each keeps one store slot).
     public static var maxRules: Int { Limits.maxActivities - Limits.reservedActivities }
+    /// Whether these blocks fit in iOS's 20 monitors (with Block now and the midnight housekeeping).
+    public static func fits(_ plans: [RulePlan]) -> Bool {
+        plans.count <= maxRules && activities(for: plans) <= maxRules
+    }
 }
 
 public enum Slots {
