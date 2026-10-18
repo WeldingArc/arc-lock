@@ -1,14 +1,19 @@
 import SwiftUI
 
+import UIKit
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var showGuide = false
+    @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
+    @State private var icon = SettingsView.currentIcon
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Backdrop()
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 18) {
                         strictCard
@@ -22,10 +27,19 @@ struct SettingsView: View {
                             }
                             .tint(Palette.brass)
                         }
+                        appearanceCard
+                            .id("appearance")
                         aboutCard
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
+                }
+                .id(themeRaw)            // redraw in the new theme
+                #if DEBUG
+                .task {
+                    if Demo.shot == "appearance" { try? await Task.sleep(for: .milliseconds(400)); proxy.scrollTo("appearance", anchor: .top) }
+                }
+                #endif
                 }
             }
             .navigationTitle(Text("Settings"))
@@ -39,6 +53,72 @@ struct SettingsView: View {
             if Demo.shot == "guide" { showGuide = true }
         }
         #endif
+    }
+
+    // MARK: appearance
+
+    private var appearanceCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Eyebrow("Appearance", color: Palette.muted)
+                Text("Theme").font(.p(15, .medium)).foregroundStyle(Palette.ink)
+                HStack(spacing: 2) {
+                    ForEach(ArcTheme.allCases) { t in
+                        let on = t.rawValue == themeRaw
+                        Button { themeRaw = t.rawValue } label: {
+                            VStack(spacing: 7) {
+                                ThemeSwatch(theme: t, selected: on)
+                                Text(t.name).font(.p(11, on ? .semibold : .regular, .caption))
+                                    .foregroundStyle(on ? Palette.ink : Palette.muted)
+                                    .lineLimit(1).minimumScaleFactor(0.8)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text(t.name))
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+                Rectangle().fill(Palette.line).frame(height: 1).padding(.vertical, 2)
+                Text("App icon").font(.p(15, .medium)).foregroundStyle(Palette.ink)
+                HStack(spacing: 2) {
+                    ForEach(ArcTheme.allCases) { t in
+                        let on = t == icon
+                        Button { setIcon(t) } label: {
+                            Image("IconPreview-\(t.rawValue)")
+                                .resizable()
+                                .interpolation(.high)
+                                .frame(width: 48, height: 48)
+                                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+                                .padding(3)
+                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(on ? Palette.brass : .clear, lineWidth: 2))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("\(t.name) icon"))
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+                Text("iOS shows a short message when the icon changes.")
+                    .font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
+            }
+        }
+    }
+
+    private static var currentIcon: ArcTheme {
+        let name = UIApplication.shared.alternateIconName
+        return ArcTheme.allCases.first { $0.iconName == name } ?? .navy
+    }
+
+    private func setIcon(_ t: ArcTheme) {
+        guard t != icon, UIApplication.shared.supportsAlternateIcons else { return }
+        UIApplication.shared.setAlternateIconName(t.iconName) { error in
+            Task { @MainActor in
+                if let error { model.problem = error.localizedDescription } else { icon = t }
+            }
+        }
     }
 
     private var strictCard: some View {
@@ -125,7 +205,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Free, no account, no ads. Pretendard font under the SIL Open Font License.")
+                Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Open source, no account, no ads. Pretendard font under the SIL Open Font License.")
                     .font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
             }
         }
@@ -168,7 +248,7 @@ struct LockInSheet: View {
                                         .font(.p(15, days == d ? .semibold : .regular))
                                         .foregroundStyle(days == d ? Palette.night : Palette.muted)
                                         .frame(maxWidth: .infinity, minHeight: 42)
-                                        .background(Capsule().fill(days == d ? Palette.brass : Color.white.opacity(0.04)))
+                                        .background(Capsule().fill(days == d ? Palette.brass : Palette.wash(0.04)))
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(Text("\(d) days"))

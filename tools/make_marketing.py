@@ -10,12 +10,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = lambda w, size: ImageFont.truetype(os.path.join(ROOT, "App", "Fonts", f"Pretendard-{w}.otf"), size)
 
 SHOTS = [
-    ("home", "Blocks that hold.", "Lock apps and websites on a schedule,\nafter a daily limit, or right now."),
-    ("editor", "No early exit.", "A running block can't be edited,\npaused or deleted in the app."),
-    ("limit", "Limits that stick.", "Used up means locked until midnight.\nMore time only counts from tomorrow."),
-    ("session", "Block now.", "From 15 minutes to 12 hours —\nthere's no stop button."),
+    ("home", "Blocks that hold.", "Schedules, daily limits and time-outs\nfor apps and websites."),
+    ("timeout", "Take a breather.", "After a stretch of use, a short break.\nThen the apps open again."),
+    ("limits", "Limits that stick.", "See the minutes left today.\nUsed up means locked until midnight."),
+    ("editor", "No early exit.", "With Strict lock, a running block\ncan't be stopped or deleted."),
+    ("appearance", "Make it yours.", "Five themes, each with\na matching app icon."),
     ("lockin", "Lock in for days.", "Freeze every rule. No loosening,\nno deleting apps."),
-    ("onboarding", "Free. Really.", "No account, no ads, no subscription.\nNothing leaves your iPhone."),
 ]
 
 W, H = 1320, 2868

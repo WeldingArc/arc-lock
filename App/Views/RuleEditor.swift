@@ -42,8 +42,8 @@ struct RuleEditor: View {
                             appsCard
                             switch plan.kind {
                             case .schedule: websitesCard; whenCard
-                            case .limit: limitCard
-                            case .timeout: timeoutCard
+                            case .limit: websitesCard; limitCard
+                            case .timeout: websitesCard; timeoutCard
                             }
                             strictCard
                             if existing != nil && !readOnly { deleteButton }
@@ -211,11 +211,11 @@ struct RuleEditor: View {
                     Button(selection.isEmpty ? "Choose apps & websites" : "Change") { showPicker = true }
                         .buttonStyle(GhostButton(tint: Palette.brass))
                 }
-                if plan.kind == .limit {
-                    Text("Time in these apps and websites adds up toward one daily limit.")
+                if plan.kind.countsUse {
+                    Text(plan.kind == .limit ? "Time in these apps and websites adds up toward one daily limit."
+                                             : "Time in these apps and websites adds up toward each break.")
                         .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
-                } else if plan.kind == .timeout {
-                    Text("Time in these apps and websites adds up toward each break.")
+                    Text("Website time counts in Safari and in browsers that share it with Screen Time (turn that on in the browser's settings).")
                         .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
                 } else if !selection.webDomainTokens.isEmpty {
                     Text("Websites picked here are blocked in Safari. To block a site in every browser, also add it by address below.")
@@ -283,14 +283,22 @@ struct RuleEditor: View {
                         .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty || plan.domains.count >= Limits.maxDomains)
                 }
                 .padding(.horizontal, 14).frame(minHeight: 46)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.wash(0.04)))
                 if domainError {
                     Text("That doesn't look like a website address.").font(.p(13, .regular, .footnote)).foregroundStyle(Palette.rose)
                 }
                 }
-                Text("Blocked in Safari, Chrome and other browsers. While a site is blocked, private browsing is off.")
+                Text(websitesNote)
                     .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
             }
+        }
+    }
+
+    private var websitesNote: String {
+        switch plan.kind {
+        case .schedule: String(localized: "Blocked in Safari and every other browser. While a site is blocked, private browsing is off.")
+        case .limit: String(localized: "Blocked in every browser once today's time is used up. To count time on a site, also pick it above.")
+        case .timeout: String(localized: "Blocked in every browser during each break. To count time on a site, also pick it above.")
         }
     }
 
@@ -425,7 +433,7 @@ struct RuleEditor: View {
         } label: {
             Image(systemName: icon).font(.system(size: 18, weight: .light)).foregroundStyle(Palette.ink)
                 .frame(width: 56, height: 44)
-                .background(Capsule().fill(Color.white.opacity(0.05)))
+                .background(Capsule().fill(Palette.wash(0.05)))
                 .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         }
         .buttonStyle(.plain)

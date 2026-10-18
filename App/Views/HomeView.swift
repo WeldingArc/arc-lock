@@ -14,7 +14,6 @@ struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     @State private var editing: EditorTarget?
     @State private var showBlockNow = false
-    @State private var showSettings = false
     @State private var showLockIn = false
     @State private var stopping: StopTarget?
 
@@ -58,7 +57,6 @@ struct HomeView: View {
         }
         .sheet(item: $editing) { target in RuleEditor(target: target).environmentObject(model) }
         .sheet(isPresented: $showBlockNow) { BlockNowSheet().environmentObject(model) }
-        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(model) }
         .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
         .confirmationDialog(Text(stopping?.title ?? ""), isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
                             titleVisibility: .visible, presenting: stopping) { target in
@@ -73,7 +71,7 @@ struct HomeView: View {
             case "limit": editing = .edit(Demo.social)
             case "timeout": editing = .edit(Demo.shorts)
             case "blocknow": showBlockNow = true
-            case "settings", "guide": showSettings = true
+            case "settings", "guide", "appearance": model.showSettings = true
             case "lockin": showLockIn = true
             default: break
             }
@@ -86,7 +84,7 @@ struct HomeView: View {
             Eyebrow("Arc Lock")
             HStack {
                 Spacer()
-                Button { showSettings = true } label: {
+                Button { model.showSettings = true } label: {
                     Image(systemName: "gearshape").font(.system(size: 19, weight: .light)).foregroundStyle(Palette.muted)
                         .frame(width: 44, height: 44)
                 }

@@ -9,8 +9,6 @@ struct ArcLockApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .preferredColorScheme(.dark)
-                .tint(Palette.brass)
                 .onChange(of: phase) { _, p in
                     if p == .active { model.didBecomeActive(); Task { await model.checkAccess() } }
                 }
@@ -20,21 +18,29 @@ struct ArcLockApp: App {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
 
     var body: some View {
         ZStack {
-            Backdrop()
-            if !model.state.onboarded {
-                OnboardingView()
-                    .transition(.opacity)
-            } else if !model.authChecked && !model.isAuthorized {
-                ArcMark(size: 84)          // a moment while iOS confirms access
-            } else if !model.isAuthorized {
-                AccessOffView()
-            } else {
-                HomeView()
+            Group {
+                Backdrop()
+                if !model.state.onboarded {
+                    OnboardingView()
+                        .transition(.opacity)
+                } else if !model.authChecked && !model.isAuthorized {
+                    ArcMark(size: 84)          // a moment while iOS confirms access
+                } else if !model.isAuthorized {
+                    AccessOffView()
+                } else {
+                    HomeView()
+                }
             }
+            // a new theme redraws every screen; Settings stays open because it's presented from here
+            .id(themeRaw)
         }
+        .preferredColorScheme(ArcTheme(rawValue: themeRaw)?.isLight == true ? .light : .dark)
+        .tint(Palette.brass)
+        .sheet(isPresented: $model.showSettings) { SettingsView().environmentObject(model) }
         .animation(.easeInOut(duration: 0.35), value: model.state.onboarded)
         .alert(String(localized: "Arc Lock"), isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
             Button("OK", role: .cancel) {}

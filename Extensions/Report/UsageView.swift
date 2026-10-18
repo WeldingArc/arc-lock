@@ -16,9 +16,14 @@ struct UsageSummary: Equatable {
 struct UsageView: View {
     let usage: UsageSummary
 
-    private static let sage = Color(.sRGB, red: 0x8F / 255, green: 0xB3 / 255, blue: 0xA0 / 255)
-    private static let rose = Color(.sRGB, red: 0xD4 / 255, green: 0x9A / 255, blue: 0x8C / 255)
-    private static let faint = Color(.sRGB, red: 0x6B / 255, green: 0x73 / 255, blue: 0x85 / 255)
+    // the chosen theme's colors (Shared/Themes.swift)
+    private static func color(_ hex: UInt32) -> Color {
+        Color(.sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+    private static var sage: Color { color(ArcTheme.current.colors.sage) }
+    private static var rose: Color { color(ArcTheme.current.colors.rose) }
+    private static var faint: Color { color(ArcTheme.current.colors.faint) }
+    private static var track: Color { ArcTheme.current.isLight ? .black.opacity(0.06) : .white.opacity(0.07) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -26,7 +31,7 @@ struct UsageView: View {
                 let part = min(1, Double(usage.minutes) / Double(limit))
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.07))
+                        Capsule().fill(Self.track)
                         if part > 0 {
                             Capsule().fill(part >= 1 ? Self.rose : Self.sage).frame(width: max(5, g.size.width * part))
                         }

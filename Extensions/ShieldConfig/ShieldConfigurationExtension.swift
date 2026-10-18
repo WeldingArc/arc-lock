@@ -21,10 +21,9 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     }
 
     private func make(_ holder: Holder?) -> ShieldConfiguration {
-        let ink = UIColor(red: 0.914, green: 0.902, blue: 0.875, alpha: 1)      // #E9E6DF
-        let muted = UIColor(red: 0.604, green: 0.631, blue: 0.694, alpha: 1)    // #9AA1B1
-        let brass = UIColor(red: 0.784, green: 0.663, blue: 0.416, alpha: 1)    // #C8A96A
-        let night = UIColor(red: 0.055, green: 0.078, blue: 0.141, alpha: 1)    // #0E1424
+        // the chosen theme (Settings › Appearance), with its phone mark — the lock shut
+        let theme = ArcTheme.current, c = theme.colors
+        let ink = UIColor(hex: c.ink), muted = UIColor(hex: c.muted), brass = UIColor(hex: c.accent), night = UIColor(hex: c.night)
         let title: String, subtitle: String
         if let h = holder {
             let when = Fmt.moment(h.until)
@@ -46,9 +45,9 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             subtitle = L("This block ends on its own. If it should be over, open Arc Lock to refresh.")
         }
         return ShieldConfiguration(
-            backgroundBlurStyle: .systemUltraThinMaterialDark,
+            backgroundBlurStyle: theme.isLight ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark,
             backgroundColor: night.withAlphaComponent(0.94),
-            icon: UIImage(named: "ShieldMark"),
+            icon: UIImage(named: "ShieldMark-\(theme.rawValue)") ?? UIImage(named: "ShieldMark"),
             title: .init(text: title, color: ink),
             subtitle: .init(text: subtitle, color: muted),
             primaryButtonLabel: .init(text: L("Close"), color: night),
@@ -86,5 +85,11 @@ struct Holder {
             found.append(Holder(name: L("Block now"), until: s.endsAt, kind: .session))
         }
         return found.max(by: { $0.until < $1.until })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt32) {
+        self.init(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
     }
 }

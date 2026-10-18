@@ -23,7 +23,8 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
 - **Daily limits** — after the time you allow (5 min – 8 h), the apps lock until midnight. Each limit shows exactly how many minutes are used and left today. A heads-up comes 5 minutes before.
 - **Time-outs** — not a full block, a pause: after a stretch of use (5 min – 4 h) the apps take a break (1 min – 2 h), then open again. Repeats all day.
 - **Block now** — lock something right away for 15 minutes to 12 hours.
-- **Websites by address** — type `youtube.com` and it's blocked in Safari, Chrome and other browsers.
+- **Websites by address** — type `youtube.com` and it's blocked in Safari, Chrome, Brave and every other browser — in schedules, daily limits, time-outs and Block now. (Websites picked in Apple's picker are counted and blocked in Safari, and counted in browsers that share their pages with Screen Time — in Brave, turn on *Settings › Shields & Privacy › Enable Screen Time*.)
+- **Themes and app icons** — five looks (Navy, Graphite, Forest, Plum, Paper), each with a matching app icon. The phone-and-lock mark in the app closes while something is blocked and opens when nothing is.
 - **Strict lock** — on by default, and set per block. While a strict block runs:
   - it can't be edited, stopped or deleted in Arc Lock,
   - **no app can be deleted** from the iPhone (Arc Lock included),
@@ -121,7 +122,7 @@ mkdir -p build
 swiftc -parse-as-library Core/ArcCore.swift Tests/CoreTests.swift -o build/coretests && build/coretests
 ```
 
-Debug builds have a screenshot mode with sample data (no Screen Time calls): launch with `-demo YES -shot home` (or `editor`, `limit`, `timeout`, `timeouts`, `blocknow`, `settings`, `lockin`, `guide`, `onboarding`).
+Debug builds have a screenshot mode with sample data (no Screen Time calls): launch with `-demo YES -shot home` (or `editor`, `limit`, `timeout`, `timeouts`, `blocknow`, `settings`, `appearance`, `lockin`, `guide`, `onboarding`); add `-theme graphite` (or `forest`, `plum`, `paper`) for another theme.
 
 ### Layout
 
@@ -134,7 +135,8 @@ Extensions/ShieldConfig     the block screen
 Extensions/ShieldAction     the block screen's only button
 Extensions/Report           DeviceActivityReport: minutes used today, drawn inside the app
 Tests/CoreTests.swift       Mac-runnable tests for Core
-tools/make_icon.swift       renders the icon and the block-screen mark
+tools/make_phone_icon.swift renders the app icons and block-screen marks for every theme
+Shared/Themes.swift         the five themes (shared with the block screen and the usage line)
 ```
 
 ## License

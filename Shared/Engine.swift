@@ -143,7 +143,8 @@ enum Monitoring {
         // a running break keeps its own monitor (its end lifts the break); anything else not wanted goes
         let liveBreaks = Set(state.rules.filter { $0.plan.isOn && $0.plan.kind == .timeout && (Breaks.until($0.id) ?? .distantPast) > now }
             .map { Names.breakActivity($0.id) })
-        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0) }
+        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
+            && !Diag.probeNames.contains($0) }
         if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
 
         for (name, (rule, p)) in wanted {
@@ -152,7 +153,11 @@ enum Monitoring {
                 try center.startMonitoring(name, during: p.schedule, events: p.events)
                 if let d = try? JSONEncoder().encode(p.registration) { AppGroup.defaults.set(d, forKey: regKey(rule.id)) }
                 AppGroup.defaults.set(now, forKey: regAtKey(rule.id))
-            } catch { errors.append(error) }
+                Diag.log("registered \(name.rawValue) (\(p.events.count) events)")
+            } catch {
+                Diag.log("register \(name.rawValue) FAILED: \(error)")
+                errors.append(error)
+            }
         }
 
         // Housekeeping at midnight: pending changes, lock-in and Block-now endings even if the app stays closed.
@@ -200,7 +205,12 @@ enum Monitoring {
                                               intervalEnd: calendar.dateComponents(comps, from: end), repeats: false)
         let center = DeviceActivityCenter()
         center.stopMonitoring([Names.breakActivity(rule.id)])
-        try? center.startMonitoring(Names.breakActivity(rule.id), during: schedule)
+        do {
+            try center.startMonitoring(Names.breakActivity(rule.id), during: schedule)
+            Diag.log("break monitor until \(end)")
+        } catch {
+            Diag.log("break monitor FAILED: \(error)")
+        }
     }
 
     /// Ends breaks whose time is up and restarts their count from now, so the next break comes after the full use
@@ -215,6 +225,7 @@ enum Monitoring {
         for r in done {
             Breaks.clear(r.id)
             resetRearms(r.id)
+            Diag.log("break over for \(r.id.uuidString.prefix(8))")
         }
         DeviceActivityCenter().stopMonitoring(done.map { Names.breakActivity($0.id) })
         sync(state, now: now, force: Set(done.filter(\.plan.isOn).map(\.id)))

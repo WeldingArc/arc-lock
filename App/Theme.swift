@@ -1,21 +1,29 @@
-// Arc family look: deep navy, brass accent, Pretendard in thin weights, centered and roomy.
+// Arc family look: a deep background, one accent, Pretendard in thin weights, centered and roomy. The colors come from
+// the chosen theme (Shared/Themes.swift); `brass` is the theme's accent (it's brass in the original Navy theme).
 import FamilyControls
 import ManagedSettings
 import SwiftUI
 
 enum Palette {
-    static let night = Color(hex: 0x0E1424)
-    static let deep = Color(hex: 0x0A0F1C)
-    static let card = Color(hex: 0x151D31)
-    static let cardHi = Color(hex: 0x1B2540)
-    static let line = Color.white.opacity(0.08)
-    static let ink = Color(hex: 0xE9E6DF)
-    static let muted = Color(hex: 0x9AA1B1)
-    static let faint = Color(hex: 0x6B7385)
-    static let brass = Color(hex: 0xC8A96A)
-    static let brassSoft = Color(hex: 0xC8A96A).opacity(0.14)
-    static let sage = Color(hex: 0x8FB3A0)
-    static let rose = Color(hex: 0xD49A8C)
+    private static var t: ThemeColors { ArcTheme.current.colors }
+    static var night: Color { Color(hex: t.night) }
+    static var deep: Color { Color(hex: t.deep) }
+    static var card: Color { Color(hex: t.card) }
+    static var cardHi: Color { Color(hex: t.cardHi) }
+    static var line: Color { wash(0.08) }
+    static var ink: Color { Color(hex: t.ink) }
+    static var muted: Color { Color(hex: t.muted) }
+    static var faint: Color { Color(hex: t.faint) }
+    static var brass: Color { Color(hex: t.accent) }
+    static var accentLight: Color { Color(hex: t.accentLight) }
+    static var accentDark: Color { Color(hex: t.accentDark) }
+    static var brassSoft: Color { brass.opacity(0.14) }
+    static var sage: Color { Color(hex: t.sage) }
+    static var rose: Color { Color(hex: t.rose) }
+    /// A faint fill or hairline that reads on the theme's background: white on dark themes, black on Paper.
+    static func wash(_ opacity: Double) -> Color {
+        ArcTheme.current.isLight ? Color.black.opacity(opacity * 0.8) : Color.white.opacity(opacity)
+    }
 }
 
 extension Color {
@@ -87,47 +95,112 @@ struct GhostButton: ButtonStyle {
             .font(.p(16, .regular, .headline))
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, minHeight: 50)
-            .background(Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.08 : 0.03)))
+            .background(Capsule().fill(Palette.wash(configuration.isPressed ? 0.08 : 0.03)))
             .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
             .contentShape(Capsule())
     }
 }
 
-/// The Arc Lock mark: a brass arc as the shackle over a quiet lock body.
+/// The Arc Lock mark: an iPhone with a lock on its screen, the same drawing as the app icon
+/// (tools/make_phone_icon.swift). The lock closes while something is blocked and opens when nothing is.
 struct ArcMark: View {
     var size: CGFloat = 72
     var locked = true
+
     var body: some View {
+        let w = size * 0.5, h = size
+        let accent = LinearGradient(colors: [Palette.accentLight, Palette.brass, Palette.accentDark],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing)
+        let t = w * 0.075
         ZStack {
-            ArcShackle(open: !locked)
-                .stroke(LinearGradient(colors: [Palette.brass, Palette.brass.opacity(0.65)], startPoint: .top, endPoint: .bottom),
-                        style: StrokeStyle(lineWidth: size * 0.085, lineCap: .round))
-                .frame(width: size * 0.56, height: size * 0.5)
-                .offset(y: -size * 0.2)
-            RoundedRectangle(cornerRadius: size * 0.14, style: .continuous)
-                .fill(Palette.cardHi)
-                .overlay(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous).strokeBorder(Palette.brass.opacity(0.35), lineWidth: 1))
-                .frame(width: size * 0.78, height: size * 0.52)
-                .offset(y: size * 0.2)
-            Capsule().fill(Palette.brass).frame(width: size * 0.06, height: size * 0.16).offset(y: size * 0.2)
+            RoundedRectangle(cornerRadius: w * 0.24, style: .continuous)
+                .fill(Palette.cardHi.opacity(0.85))
+                .padding(t / 2)
+            RoundedRectangle(cornerRadius: w * 0.24, style: .continuous)
+                .strokeBorder(accent, lineWidth: t)
+            Capsule().fill(Palette.brass.opacity(0.85))
+                .frame(width: w * 0.30, height: w * 0.085)
+                .position(x: w / 2, y: t + w * 0.07 + w * 0.0425)
+            LockShackle(openness: locked ? 0 : 1)
+                .stroke(accent, style: StrokeStyle(lineWidth: t * 0.95, lineCap: .round))
+            LockBody()
+                .fill(accent)
+            LockKeyhole()
+                .fill(Palette.night)
         }
+        .frame(width: w, height: h)
         .frame(width: size, height: size)
+        .animation(.spring(response: 0.5, dampingFraction: 0.62), value: locked)
         .accessibilityHidden(true)
     }
 }
 
-struct ArcShackle: Shape {
-    var open = false
+/// Geometry shared by the lock's parts, in the phone's frame (width w, height h).
+private struct LockGeometry {
+    let w: CGFloat, h: CGFloat
+    init(_ r: CGRect) { w = r.width; h = r.height }
+    var bodyW: CGFloat { w * 0.52 }
+    var bodyH: CGFloat { bodyW * 0.72 }
+    var bodyY: CGFloat { h / 2 - bodyH * 0.12 }
+    var body: CGRect { CGRect(x: w / 2 - bodyW / 2, y: bodyY, width: bodyW, height: bodyH) }
+    var shackleR: CGFloat { bodyW * 0.29 }
+    var shackleT: CGFloat { w * 0.075 * 0.95 }
+}
+
+/// The shackle; `openness` 0 = shut, 1 = lifted with the right leg out of the body (animatable).
+struct LockShackle: Shape {
+    var openness: CGFloat
+    var animatableData: CGFloat {
+        get { openness }
+        set { openness = newValue }
+    }
     func path(in r: CGRect) -> Path {
+        let g = LockGeometry(r)
+        let lift = g.bodyW * 0.20 * openness
+        let center = CGPoint(x: r.midX, y: r.minY + g.bodyY - g.bodyW * 0.20 - lift)
+        let foot = r.minY + g.bodyY + g.shackleT * 0.6
         var p = Path()
-        let radius = r.width / 2
-        let center = CGPoint(x: r.midX, y: r.minY + radius)
-        let lift: CGFloat = open ? r.height * 0.25 : 0
-        p.move(to: CGPoint(x: r.minX, y: r.maxY - lift))
-        p.addLine(to: CGPoint(x: r.minX, y: center.y - lift))
-        p.addArc(center: CGPoint(x: center.x, y: center.y - lift), radius: radius, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-        p.addLine(to: CGPoint(x: r.maxX, y: open ? center.y : r.maxY))
+        p.move(to: CGPoint(x: r.midX - g.shackleR, y: foot - lift))
+        p.addLine(to: CGPoint(x: r.midX - g.shackleR, y: center.y))
+        p.addArc(center: center, radius: g.shackleR, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        // the right leg leaves the body as it opens
+        p.addLine(to: CGPoint(x: r.midX + g.shackleR, y: foot + (center.y + g.bodyW * 0.05 - foot) * openness))
         return p
+    }
+}
+
+struct LockBody: Shape {
+    func path(in r: CGRect) -> Path {
+        let g = LockGeometry(r)
+        return Path(roundedRect: g.body.offsetBy(dx: r.minX, dy: r.minY), cornerRadius: g.bodyW * 0.16, style: .continuous)
+    }
+}
+
+struct LockKeyhole: Shape {
+    func path(in r: CGRect) -> Path {
+        let g = LockGeometry(r)
+        let c = CGPoint(x: r.minX + g.body.midX, y: r.minY + g.body.midY - g.bodyH * 0.08)
+        var p = Path()
+        p.addEllipse(in: CGRect(x: c.x - g.bodyW * 0.075, y: c.y - g.bodyW * 0.075, width: g.bodyW * 0.15, height: g.bodyW * 0.15))
+        p.addRoundedRect(in: CGRect(x: c.x - g.bodyW * 0.032, y: c.y, width: g.bodyW * 0.064, height: g.bodyH * 0.32),
+                         cornerSize: CGSize(width: g.bodyW * 0.032, height: g.bodyW * 0.032))
+        return p
+    }
+}
+
+/// A theme's colors as a split circle (background and accent), ringed when chosen.
+struct ThemeSwatch: View {
+    let theme: ArcTheme
+    var selected = false
+    var body: some View {
+        let c = theme.colors
+        Circle()
+            .fill(LinearGradient(stops: [.init(color: Color(hex: c.night), location: 0.5), .init(color: Color(hex: c.accent), location: 0.5)],
+                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(Circle().strokeBorder(Palette.line, lineWidth: 1))
+            .frame(width: 38, height: 38)
+            .padding(4)
+            .overlay(Circle().strokeBorder(selected ? Palette.brass : .clear, lineWidth: 2))
     }
 }
 
@@ -189,7 +262,7 @@ struct DayChips: View {
                         .font(.p(14, on ? .semibold : .regular, .callout))
                         .foregroundStyle(on ? Palette.night : Palette.muted)
                         .frame(width: 38, height: 38)
-                        .background(Circle().fill(on ? Palette.brass : Color.white.opacity(0.04)))
+                        .background(Circle().fill(on ? Palette.brass : Palette.wash(0.04)))
                         .overlay(Circle().strokeBorder(on ? .clear : Palette.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)

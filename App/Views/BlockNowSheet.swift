@@ -10,6 +10,10 @@ struct BlockNowSheet: View {
     @State private var showPicker = false
     @State private var confirm = false
     @State private var strict = true
+    @State private var domains: [String] = []
+    @State private var newDomain = ""
+    @State private var domainError = false
+    private var nothingChosen: Bool { selection.isEmpty && domains.isEmpty }
     private var stoppable: Bool { !strict || !model.strictLockActive }
     private let presets = [15, 30, 60, 120, 240]
     private var overCap: Bool {
@@ -38,6 +42,7 @@ struct BlockNowSheet: View {
                                 }
                             }
                         }
+                        websitesCard
                         Card {
                             VStack(spacing: 16) {
                                 Eyebrow("For", color: Palette.muted)
@@ -52,7 +57,7 @@ struct BlockNowSheet: View {
                                                 .font(.p(13, minutes == m ? .semibold : .regular))
                                                 .foregroundStyle(minutes == m ? Palette.night : Palette.muted)
                                                 .frame(maxWidth: .infinity, minHeight: 36)
-                                                .background(Capsule().fill(minutes == m ? Palette.brass : Color.white.opacity(0.04)))
+                                                .background(Capsule().fill(minutes == m ? Palette.brass : Palette.wash(0.04)))
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -82,8 +87,8 @@ struct BlockNowSheet: View {
                         }
                         Button("Start") { confirm = true }
                             .buttonStyle(BrassButton())
-                            .disabled(selection.isEmpty || overCap)
-                            .opacity(selection.isEmpty || overCap ? 0.5 : 1)
+                            .disabled(nothingChosen || overCap)
+                            .opacity(nothingChosen || overCap ? 0.5 : 1)
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
@@ -109,10 +114,58 @@ struct BlockNowSheet: View {
     }
 
     private func start() {
-        switch model.startSession(selection: selection, domains: [], minutes: minutes, strict: strict) {
+        switch model.startSession(selection: selection, domains: domains, minutes: minutes, strict: strict) {
         case .refused(let why): model.problem = why
         default: dismiss()
         }
+    }
+}
+
+extension BlockNowSheet {
+    /// Typed addresses go through iOS's web filter, so they're blocked in every browser (picked websites: Safari only).
+    fileprivate var websitesCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Eyebrow("Websites by address", color: Palette.muted)
+                ForEach(domains, id: \.self) { d in
+                    HStack {
+                        Image(systemName: "globe").foregroundStyle(Palette.faint)
+                        Text(d).font(.p(16, .regular)).foregroundStyle(Palette.ink)
+                        Spacer()
+                        Button { domains.removeAll { $0 == d } } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.faint)
+                        }
+                        .accessibilityLabel(Text("Remove \(d)"))
+                    }
+                }
+                HStack {
+                    TextField(text: $newDomain, prompt: Text("youtube.com").foregroundStyle(Palette.faint)) { Text("Website") }
+                        .font(.p(16, .regular))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .submitLabel(.done)
+                        .onSubmit(addDomain)
+                    Button("Add", action: addDomain)
+                        .font(.p(15, .medium)).foregroundStyle(Palette.brass)
+                        .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty || domains.count >= Limits.maxDomains)
+                }
+                .padding(.horizontal, 14).frame(minHeight: 46)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.wash(0.04)))
+                if domainError {
+                    Text("That doesn't look like a website address.").font(.p(13, .regular, .footnote)).foregroundStyle(Palette.rose)
+                }
+                Text("Blocked in Safari and every other browser while Block now runs.")
+                    .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.faint)
+            }
+        }
+    }
+
+    fileprivate func addDomain() {
+        guard let d = Domains.normalize(newDomain) else { domainError = !newDomain.isEmpty; return }
+        domainError = false
+        if !domains.contains(d) { domains.append(d) }
+        newDomain = ""
     }
 }
 

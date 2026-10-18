@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.2"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "1.0.3"
+    CURRENT_PROJECT_VERSION: "7"
     DEVELOPMENT_TEAM: 446W55N7PB
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
@@ -60,6 +60,8 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: App/ArcLock.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # the other themes' icons (Settings › Appearance › App icon)
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Graphite AppIcon-Forest AppIcon-Plum AppIcon-Paper"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
   ArcLockMonitor:

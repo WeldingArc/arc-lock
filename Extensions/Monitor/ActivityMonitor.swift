@@ -7,6 +7,7 @@ import ManagedSettings
 final class ActivityMonitor: DeviceActivityMonitor {
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
+        Diag.log("start \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
         // The daily monitor also re-registers limits whose thresholds were only meant for yesterday.
         if activity == Names.daily || changed { Monitoring.sync(state) }
@@ -16,6 +17,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        Diag.log("end \(activity.rawValue)")
         var (state, _) = Engine.housekeep()
         var skip = Set<UUID>()
         if let id = Names.ruleID(activity), let rule = state.rules.first(where: { $0.id == id }), rule.plan.kind == .schedule {
@@ -36,12 +38,14 @@ final class ActivityMonitor: DeviceActivityMonitor {
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
+        Diag.log("threshold \(event.rawValue) in \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
         if changed { Monitoring.sync(state) }
         let now = Date()
         guard let id = Names.ruleID(activity) else { return }
         guard let rule = state.rules.first(where: { $0.id == id }), Engine.counts(rule, now: now) else {
             // deleted or switched off by a change that took effect at midnight
+            Diag.log("  → not counting now")
             if !state.rules.contains(where: { $0.id == id }) { DeviceActivityCenter().stopMonitoring([activity]) }
             Engine.reconcile(state)
             return
@@ -50,6 +54,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
         // these thresholds don't mean what they say — re-register, don't block.
         guard let registered = Monitoring.registration(id), registered == Monitoring.plan(for: rule, now: now).registration,
               let tenth = Names.tenth(of: event), let minutes = registered.thresholds[event.rawValue] else {
+            Diag.log("  → registered for a different version: re-sync")
             Monitoring.sync(state, now: now)
             Engine.reconcile(state)
             return
@@ -58,11 +63,13 @@ final class ActivityMonitor: DeviceActivityMonitor {
         // clock, so a threshold that couldn't have been reached yet is ignored. iOS won't send that event again
         // today, so a too-early limit restarts its count from what today's marks prove.
         guard Plausibility.thresholdIsReal(minutes: minutes, countingSince: Monitoring.countingSince(id, now: now), now: now) else {
+            Diag.log("  → too early (\(minutes) min since \(Monitoring.countingSince(id, now: now))): re-arm")
             if tenth >= 10 { Monitoring.rearm(rule, state: state, now: now) }
             return
         }
         if rule.plan.kind == .timeout {
-            guard tenth >= 10, (Breaks.until(id) ?? .distantPast) <= now else { return }
+            guard tenth >= 10, (Breaks.until(id) ?? .distantPast) <= now else { Diag.log("  → already on a break"); return }
+            Diag.log("  → break for \(rule.plan.breakMinutes) min")
             Monitoring.startBreak(rule, now: now)
             let back = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
             Notify.post(id: "break.\(id)", title: rule.plan.name,
@@ -70,6 +77,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
             Engine.reconcile(StateStore.load(), now: now)
             return
         }
+        Diag.log("  → limit at tenth \(tenth)")
         Marks.raise(id, to: tenth, now: now)
         if tenth >= 10 {
             if let store = Engine.store(for: id, in: state) {
@@ -82,6 +90,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
 
     override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventWillReachThresholdWarning(event, activity: activity)
+        Diag.log("warning \(event.rawValue) in \(activity.rawValue)")
         let now = Date()
         guard event == Names.limitEvent, let id = Names.ruleID(activity),
               let rule = StateStore.load().rules.first(where: { $0.id == id }), Engine.counts(rule, now: now),

@@ -14,6 +14,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var auth = AuthorizationCenter.shared.authorizationStatus
     @Published private(set) var now = Date()
     @Published var toast: String?
+    /// Settings is presented from the root, so it stays open while a new theme redraws the screens below it.
+    @Published var showSettings = false
     @Published var problem: String?
     /// False until this launch has confirmed Screen Time access (a fresh process can read "not determined" at first).
     @Published private(set) var authChecked = false
@@ -31,6 +33,7 @@ final class AppModel: ObservableObject {
     init() {
         #if DEBUG
         if Demo.isOn {
+            if let t = UserDefaults.standard.string(forKey: "theme").flatMap(ArcTheme.init(rawValue:)) { ArcTheme.current = t }
             demo = true
             state = Demo.state()
             now = Demo.now
@@ -56,6 +59,13 @@ final class AppModel: ObservableObject {
         }
         refresh()
         Task { await checkAccess() }
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "probe") {
+        case "start": Diag.startProbes(state); Diag.dumpMonitors()
+        case "stop": Diag.stopProbes(); Diag.dumpMonitors()
+        default: break
+        }
+        #endif
     }
 
     var isAuthorized: Bool {
@@ -155,6 +165,7 @@ final class AppModel: ObservableObject {
         report(Monitoring.sync(s))
         Monitoring.finishBreaks(s)
         Engine.reconcile(s)
+        Diag.dumpMonitors()
     }
 
     private func report(_ errors: [Error]) {
@@ -323,7 +334,6 @@ final class AppModel: ObservableObject {
         if !demo { now = Date() }            // lock decisions always use the real clock, not the 15-second tick
         var plan = plan
         plan.name = plan.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if plan.kind.countsUse { plan.domains = [] }
         if plan.kind == .schedule && plan.isOn {
             let others = state.rules.filter { $0.id != id }.map(\.plan)
             guard Coverage.leavesFreeTime(others + [plan]) else {
@@ -447,7 +457,7 @@ final class AppModel: ObservableObject {
         if selection.applicationTokens.count > Limits.maxApps || selection.webDomainTokens.count > Limits.maxDomains {
             return .refused(String(localized: "Choose at most \(Limits.maxApps) apps and \(Limits.maxDomains) websites — or pick whole categories instead."))
         }
-        guard Limits.sessionMinutes.contains(minutes), !selection.isEmpty else {
+        guard Limits.sessionMinutes.contains(minutes), !selection.isEmpty || !domains.isEmpty else {
             return .refused(String(localized: "Choose what to block and a time from 15 minutes to 12 hours."))
         }
         if let s = activeSession { return .refused(String(localized: "A Block now session is already running until \(Fmt.moment(s.endsAt)).")) }
