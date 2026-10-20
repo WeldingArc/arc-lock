@@ -26,7 +26,7 @@ enum Demo {
 
     static func state() -> ArcState {
         var s = ArcState()
-        s.onboarded = shot != "onboarding"
+        s.onboarded = !(shot ?? "").hasPrefix("onboarding")
         s.rules = [
             Rule(id: study, plan: RulePlan(name: "Study", kind: .schedule, start: TimeOfDay(9, 0), end: TimeOfDay(17, 0),
                                            days: [2, 3, 4, 5, 6], domains: ["youtube.com", "instagram.com", "reddit.com"]),

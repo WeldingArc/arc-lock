@@ -249,8 +249,10 @@ final class AppModel: ObservableObject {
         return isAuthorized
     }
 
+    /// Shows iOS's notification request; a "Don't Allow" there switches heads-ups off (Settings can turn them on again).
     func requestNotifications() async {
-        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false
+        if !granted { setHeadsUp(false) }
     }
 
     func finishOnboarding() { commit { $0.onboarded = true } }
@@ -514,7 +516,7 @@ final class AppModel: ObservableObject {
             case .excessiveActivities: return String(localized: "Too many blocks for iOS to watch. Delete one.")
             case .intervalTooShort: return String(localized: "A block must last at least 15 minutes.")
             case .intervalTooLong: return String(localized: "That block is longer than iOS allows.")
-            case .unauthorized: return String(localized: "Screen Time access is off. Allow it to keep blocking.")
+            case .unauthorized: return String(localized: "Screen Time access is off. Turn it on again to keep blocking.")
             default: return error.localizedDescription
             }
         }

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// First run: what Arc Lock does, then Screen Time access (required) and notifications (optional).
+/// First run: what Arc Lock does, then Screen Time access (required) and notifications (optional). Each permission
+/// screen only explains and continues to iOS's own request, where the choice is made (App Review 5.1.1(iv)).
 struct OnboardingView: View {
     @EnvironmentObject private var model: AppModel
     @State private var page = 0
@@ -16,6 +17,12 @@ struct OnboardingView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: page)
+            #if DEBUG
+            .onAppear {
+                if Demo.shot == "onboarding-access" { page = 2 }
+                if Demo.shot == "onboarding-notifications" { page = 3 }
+            }
+            #endif
             dots.padding(.bottom, 18)
         }
     }
@@ -81,12 +88,12 @@ struct OnboardingView: View {
     private var access: some View {
         screen(content: {
             Image(systemName: "hourglass.circle").font(.system(size: 64, weight: .ultraLight)).foregroundStyle(Palette.brass)
-            Text("Allow Screen Time access").font(.p(30, .light, .title)).foregroundStyle(Palette.ink)
+            Text("Screen Time access").font(.p(30, .light, .title)).foregroundStyle(Palette.ink)
             Text("Arc Lock blocks apps through Apple's Screen Time. iOS will ask for your Face ID or passcode.")
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
             Text("Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.")
                 .font(.p(14, .regular)).foregroundStyle(Palette.faint)
-        }, button: "Allow", action: {
+        }, button: "Continue", action: {
             asking = true
             Task {
                 // iOS answers within seconds on a real iPhone; never leave the button dead if it doesn't
@@ -107,14 +114,11 @@ struct OnboardingView: View {
             Text("Get a heads-up").font(.p(30, .light, .title)).foregroundStyle(Palette.ink)
             Text("A quiet notice before a block starts, a daily limit runs out, or a break begins.")
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
-        }, button: "Allow notifications", secondary: "Not now", action: {
+        }, button: "Continue", action: {
             Task {
                 await model.requestNotifications()
                 model.finishOnboarding()
             }
-        }, secondaryAction: {
-            model.setHeadsUp(false)
-            model.finishOnboarding()
         })
     }
 }

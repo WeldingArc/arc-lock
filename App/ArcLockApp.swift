@@ -84,7 +84,7 @@ struct AccessOffView: View {
                 .foregroundStyle(Palette.muted)
                 .multilineTextAlignment(.center)
             Spacer()
-            Button("Allow Screen Time access") { Task { _ = await model.requestScreenTime() } }
+            Button("Continue") { Task { _ = await model.requestScreenTime() } }
                 .buttonStyle(BrassButton())
         }
         .padding(.horizontal, 28)
