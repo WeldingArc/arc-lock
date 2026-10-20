@@ -20,7 +20,7 @@ struct BlocksTab: View {
                 Section {} footer: {
                     Text(model.strictLockActive
                          ? "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted."
-                         : "Strict lock is off, so any block can be stopped.")
+                         : "Strict lock is off: blocks can be stopped (a strict daily limit or time-out stays strict until its next reset).")
                 }
             }
             .themedList()
@@ -169,8 +169,8 @@ struct BlockRow: View {
                 }
             }
             if let p = rule.pending {
-                Label(p.plan == nil ? "Will be deleted at \(Fmt.moment(model.effectiveDate(p), now: model.now))"
-                                    : "Your changes start at \(Fmt.moment(model.effectiveDate(p), now: model.now))",
+                Label(p.plan == nil ? "Will be deleted at \(Fmt.moment(model.effectiveDate(p, plan: rule.plan), now: model.now))"
+                                    : "Your changes start at \(Fmt.moment(model.effectiveDate(p, plan: rule.plan), now: model.now))",
                       systemImage: "clock.arrow.circlepath")
                     .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
             }

@@ -67,7 +67,9 @@ struct UsageScene: DeviceActivityReportScene {
         }
         var minutes = Int(seconds / 60)
         if let limit { minutes += Credits.today(limit.id, period: periodStart) }
-        return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: since > periodStart ? since : nil)
+        // "since 4:00 AM" when the count began later than midnight (a reset time, or a change today)
+        let shownSince = since > periodStart ? since : (rule.map { $0.plan.resetAt != .midnight } == true ? periodStart : nil)
+        return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: shownSince)
     }
 
     /// Everything the filter let through: the block's apps, the apps in its categories, and its websites.

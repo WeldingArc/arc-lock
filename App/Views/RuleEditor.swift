@@ -119,10 +119,10 @@ struct RuleEditor: View {
         case .free:
             EmptyView()
         }
-        if let p = existing?.pending {
+        if let r = existing, let p = r.pending {
             Section {
-                Text(p.plan == nil ? "This block will be deleted at \(Fmt.moment(model.effectiveDate(p), now: model.now))."
-                                   : "Changes are waiting until \(Fmt.moment(model.effectiveDate(p), now: model.now)). Until then the current version runs.")
+                Text(p.plan == nil ? "This block will be deleted at \(Fmt.moment(model.effectiveDate(p, plan: r.plan), now: model.now))."
+                                   : "Changes are waiting until \(Fmt.moment(model.effectiveDate(p, plan: r.plan), now: model.now)). Until then the current version runs.")
                     .foregroundStyle(Palette.muted)
                 Button("Keep the current version") {
                     if let id = existing?.id { model.cancelPending(id); dismiss() }
@@ -367,7 +367,9 @@ struct RuleEditor: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(plan.strict ? "While it runs, it can't be stopped, loosened or deleted." : "You can stop it or change it any time.")
                 if plan.strict && !model.state.strictLock {
-                    Text("Strict lock is off in Settings, so for now every block can be stopped.").foregroundStyle(Palette.rose)
+                    Text(plan.kind.countsUse ? "Strict lock is off in Settings, so this block can be stopped after its next reset."
+                                             : "Strict lock is off in Settings, so for now this block can be stopped.")
+                        .foregroundStyle(Palette.rose)
                 }
             }
         }

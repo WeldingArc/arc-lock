@@ -69,7 +69,7 @@ struct OnboardingView: View {
             Eyebrow("How it works")
             VStack(spacing: 26) {
                 feature("calendar.badge.clock", "Schedules", "Pick apps and websites and the hours they stay locked.")
-                feature("hourglass", "Daily limits", "After the time you allow, they lock until midnight.")
+                feature("hourglass", "Daily limits", "After the time you allow, they lock until the limit resets.")
                 feature("cup.and.saucer", "Time-outs", "After a stretch of use, a short break. Then they open again.")
                 feature("lock.fill", "Strict lock", "A strict block can't be stopped while it runs, and Arc Lock can't be deleted.")
             }

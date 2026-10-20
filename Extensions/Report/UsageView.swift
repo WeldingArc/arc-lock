@@ -52,6 +52,9 @@ struct UsageView: View {
     private var caption: String {
         let used = Self.duration(usage.minutes)
         guard let limit = usage.limit else {
+            if let since = usage.since {
+                return String(localized: "\(used) since \(since.formatted(date: .omitted, time: .shortened))")
+            }
             return usage.minutes == 0 ? String(localized: "Not used yet today") : String(localized: "\(used) used today")
         }
         let left = max(0, limit - usage.minutes)

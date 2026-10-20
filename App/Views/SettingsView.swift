@@ -63,7 +63,7 @@ struct SettingsTab: View {
         } footer: {
             Text(model.state.strictLock
                  ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off takes effect at midnight, after any strict block running then has ended."
-                 : "Off: every block can be stopped or changed any time. Lock-in needs it on.")
+                 : "Off: blocks can be stopped or changed any time (a strict daily limit or time-out stays strict until its next reset). Lock-in needs it on.")
         }
         .listRowBackground(Palette.card)
     }

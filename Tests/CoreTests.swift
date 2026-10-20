@@ -381,6 +381,30 @@ struct CoreTests {
         let after = Period.end(after: e0, resetAt: half2, calendar: nyc)
         check(after > e0, "the next reset after the skipped hour comes later")
 
+        // 1.1 review fixes
+        let ten = TimeOfDay(22, 0)
+        let weekdaysLate = RulePlan(name: "Work apps", kind: .limit, days: [2, 3, 4, 5, 6], limitMinutes: 60, resetAt: ten)
+        check(Status.of(weekdaysLate, now: date("2026-10-17 12:00", seoul), reachedAt: nil, calendar: seoul) == .resting,
+              "a 10 PM reset: Saturday noon belongs to Saturday (not Friday)")
+        check(Status.of(weekdaysLate, now: date("2026-10-12 12:00", seoul), reachedAt: nil, calendar: seoul) == .counting,
+              "…and Monday noon to Monday")
+        check(Period.weekday(containing: date("2026-10-16 23:00", seoul), resetAt: ten, calendar: seoul) == 7,
+              "Friday 11 PM with a 10 PM reset counts as Saturday")
+        // a lock-in holds a queued change: it must land on the block's own reset, not on the lock-in's midnight
+        var heldLimit: [RuleRecord<[String]>] = [RuleRecord(plan: late, selection: [], pending: PendingChange(
+            plan: everyDay, selection: nil, effectiveAt: date("2026-10-13 04:00", seoul)))]
+        let lockEnd = date("2026-10-14 00:00", seoul)
+        check(Pending.holdForLockIn(&heldLimit, lockInUntil: lockEnd, calendar: seoul), "a held change moves")
+        check(heldLimit[0].pending?.effectiveAt == date("2026-10-14 04:00", seoul), "…to the first 4 AM reset after the lock-in")
+        check(Pending.applyDue(&heldLimit, now: lockEnd, frozenUntil: nil).isEmpty, "nothing applies at the lock-in's midnight")
+        check(Pending.applyDue(&heldLimit, now: date("2026-10-14 04:00", seoul), frozenUntil: nil).count == 1, "it applies at 4 AM")
+        var heldMidnight: [RuleRecord<[String]>] = [RuleRecord(plan: RulePlan(name: "M", kind: .limit, limitMinutes: 30), selection: [],
+            pending: PendingChange(plan: RulePlan(name: "M", kind: .limit, limitMinutes: 60), selection: nil, effectiveAt: date("2026-10-13 00:00", seoul)))]
+        Pending.holdForLockIn(&heldMidnight, lockInUntil: lockEnd, calendar: seoul)
+        check(heldMidnight[0].pending?.effectiveAt == lockEnd, "a midnight block's change still lands when the lock-in ends")
+        check(Pending.effectiveDate(date("2026-10-13 04:00", seoul), plan: late, lockInUntil: lockEnd, now: date("2026-10-12 12:00", seoul), calendar: seoul)
+              == date("2026-10-14 04:00", seoul), "the app shows the real date")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

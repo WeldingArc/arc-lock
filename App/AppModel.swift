@@ -28,7 +28,8 @@ final class AppModel: ObservableObject {
     private var demo = false
     private var bag = Set<AnyCancellable>()
     private var ticker: AnyCancellable?
-    private let calendar = Calendar.current
+    /// Follows the iPhone's time zone as it changes (travel), so periods are computed like the extensions do.
+    private var calendar: Calendar { .autoupdatingCurrent }
 
     init() {
         #if DEBUG
@@ -223,7 +224,7 @@ final class AppModel: ObservableObject {
         // re-check when a block, a session or a lock-in has just ended, or a pending change is due; a switch-off
         // that has to wait (for a lock-in or a running strict block) is re-checked when that ends
         let ended = before.contains { $0 <= now }
-        let due = state.rules.contains { $0.pending.map { effectiveDate($0) <= now } ?? false }
+        let due = state.rules.contains { r in r.pending.map { effectiveDate($0, plan: r.plan) <= now } ?? false }
         func newlyDue(_ d: Date?) -> Bool { d.map { $0 > previous && $0 <= now } ?? false }
         let switchDue = newlyDue(state.deletionProtectionOffAt) || newlyDue(state.strictLockOffAt)
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
@@ -293,7 +294,7 @@ final class AppModel: ObservableObject {
     func setStrictLock(_ on: Bool) -> Outcome {
         if !demo { now = Date() }
         if on {
-            commit { $0.strictLock = true; $0.strictLockOffAt = nil }
+            commit { $0.strictLock = true; $0.strictLockOffAt = nil; $0.strictOffSince = nil }
             return .saved
         }
         if lockInActive, let until = state.lockInUntil {
@@ -400,7 +401,9 @@ final class AppModel: ObservableObject {
                     used = max(Credits.today(id, period: periodStart(existing.plan)),
                                LimitMath.usedAtLeast(level: usageLevel(existing), limit: existing.plan.limitMinutes))
                 }
-                // carried into the new version's period (its reset time may have changed)
+                // carried into the new version's period (its reset time may have changed): only when that period began
+                // no later than the old one, so all of the counted use really falls inside it
+                if periodStart(plan) > periodStart(existing.plan) { used = 0 }
                 Marks.clear(id)
                 Credits.set(id, minutes: plan.isOn ? used : 0, period: periodStart(plan))
                 let level = LimitMath.level(forUsed: used, limit: plan.limitMinutes)
@@ -445,9 +448,8 @@ final class AppModel: ObservableObject {
     }
 
     /// When a pending change really takes effect: its own time, or the end of a lock-in that holds it back.
-    func effectiveDate(_ p: RuleChange) -> Date {
-        if let l = state.lockInUntil, l > now, l > p.effectiveAt { return l }
-        return p.effectiveAt
+    func effectiveDate(_ p: RuleChange, plan: RulePlan) -> Date {
+        Pending.effectiveDate(p.effectiveAt, plan: plan, lockInUntil: state.lockInUntil, now: now, calendar: calendar)
     }
 
     /// Undoing a pending looser change only makes things stricter, so it's always allowed — even during a lock-in.
@@ -511,7 +513,7 @@ final class AppModel: ObservableObject {
         let when = Fmt.moment(until, now: now)
         switch reason {
         case .running, .session: return String(localized: "This block is running. It can't be changed until \(when).")
-        case .reached: return String(localized: "Today's limit is used up. It can't be changed until \(when).")
+        case .reached: return String(localized: "This limit is used up. It can't be changed until \(when).")
         case .onBreak: return String(localized: "This time-out is on a break. It can't be changed until \(when).")
         case .lockIn: return String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). Rules can't be changed until then.")
         }

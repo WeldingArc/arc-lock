@@ -171,9 +171,11 @@ public enum Period {
         let end = ScheduleMath.moment(resetAt, on: nextDay, calendar: calendar) ?? nextDay
         return end > date ? end : calendar.date(byAdding: .day, value: 1, to: end)!
     }
-    /// The weekday a period counts as: the day it started on (a 4 AM reset makes 2 AM Tuesday part of Monday).
+    /// The weekday a period counts as: the day most of it falls on (its middle). A 4 AM reset makes 2 AM Tuesday
+    /// part of Monday; a 10 PM reset makes Friday 11 PM part of Saturday.
     public static func weekday(containing date: Date, resetAt: TimeOfDay, calendar: Calendar) -> Int {
-        calendar.component(.weekday, from: start(containing: date, resetAt: resetAt, calendar: calendar))
+        let middle = start(containing: date, resetAt: resetAt, calendar: calendar).addingTimeInterval(12 * 3600)
+        return calendar.component(.weekday, from: middle)
     }
 }
 
@@ -421,6 +423,33 @@ public enum DecodeReport {
 }
 
 public enum Pending {
+    /// A lock-in holds queued changes back. A daily limit's or time-out's change must still land on one of its own
+    /// resets, or it would hand out a fresh count mid-period: while a lock-in is set (or has just ended), move such
+    /// changes to the first reset at or after the lock-in's end. Returns whether anything moved.
+    @discardableResult
+    public static func holdForLockIn<S>(_ rules: inout [RuleRecord<S>], lockInUntil: Date?, calendar: Calendar) -> Bool {
+        guard let lockIn = lockInUntil else { return false }
+        var moved = false
+        for i in rules.indices {
+            guard var p = rules[i].pending, rules[i].plan.kind.countsUse else { continue }
+            let target = Period.end(after: lockIn.addingTimeInterval(-1), resetAt: rules[i].plan.resetAt, calendar: calendar)
+            if p.effectiveAt < target {
+                p.effectiveAt = target
+                rules[i].pending = p
+                moved = true
+            }
+        }
+        return moved
+    }
+
+    /// When a queued change really takes effect: its own time, or after a lock-in that holds it back (for a daily
+    /// limit or time-out: its first reset after the lock-in ends).
+    public static func effectiveDate(_ effectiveAt: Date, plan: RulePlan, lockInUntil: Date?, now: Date, calendar: Calendar) -> Date {
+        guard let lockIn = lockInUntil, lockIn > now, lockIn > effectiveAt else { return effectiveAt }
+        guard plan.kind.countsUse else { return lockIn }
+        return Period.end(after: lockIn.addingTimeInterval(-1), resetAt: plan.resetAt, calendar: calendar)
+    }
+
     /// Applies changes whose time has come. Returns the ids of rules that changed or were deleted.
     /// Nothing is applied while a lock-in runs (`frozenUntil` in the future): queued changes wait for it to end.
     @discardableResult

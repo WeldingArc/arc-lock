@@ -145,7 +145,7 @@ enum StopTarget: Identifiable {
     var action: String {
         switch self {
         case .rule(_, _, .running(let until)): String(localized: "Stop until \(Fmt.time(until))")
-        case .rule(_, _, .reached): String(localized: "Stop for today")
+        case .rule(_, _, .reached): String(localized: "Stop until it resets")
         case .rule(_, _, .onBreak): String(localized: "End break")
         case .rule: String(localized: "Stop")
         case .session: String(localized: "Stop Block now")

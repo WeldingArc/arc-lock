@@ -57,6 +57,9 @@ struct ArcState: Codable, Equatable {
     /// On by default; switching it off waits for midnight.
     var strictLock = true
     var strictLockOffAt: Date?
+    /// When Strict lock last switched off: strict daily limits and time-outs keep their lock until their own next
+    /// reset after that moment (switching off never frees one mid-period).
+    var strictOffSince: Date?
     /// Rule id → store slot. iOS allows an app 50 named stores in total, so rules reuse a fixed pool of slots.
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
@@ -64,7 +67,7 @@ struct ArcState: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
-        case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt
+        case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt, strictOffSince
     }
 
     init() {}
@@ -73,7 +76,13 @@ struct ArcState: Codable, Equatable {
 
     /// A lock-in makes everything strict; otherwise a block is strict when it and the global switch both are.
     func isStrict(_ plan: RulePlan, now: Date = Date()) -> Bool {
-        Policy.lockInActive(lockInUntil, now: now) || (strictLock && plan.strict)
+        if Policy.lockInActive(lockInUntil, now: now) { return true }
+        if strictLock { return plan.strict }
+        // switched off: a strict limit or time-out keeps its lock until its own next reset after the switch-off
+        if plan.strict, plan.kind.countsUse, let since = strictOffSince {
+            return now < Period.end(after: since.addingTimeInterval(-1), resetAt: plan.resetAt, calendar: .autoupdatingCurrent)
+        }
+        return false
     }
     func isStrict(_ session: FocusSession, now: Date = Date()) -> Bool {
         Policy.lockInActive(lockInUntil, now: now) || (strictLock && session.strict)
@@ -105,6 +114,7 @@ struct ArcState: Codable, Equatable {
         deletionProtectionOffAt = try? c.decode(Date.self, forKey: .deletionProtectionOffAt)
         strictLock = (try? c.decode(Bool.self, forKey: .strictLock)) ?? true
         strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
+        strictOffSince = try? c.decode(Date.self, forKey: .strictOffSince)
     }
 }
 

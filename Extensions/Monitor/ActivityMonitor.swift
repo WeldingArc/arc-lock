@@ -86,7 +86,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
                 Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule.plan, now: now))
             }
             let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
-            Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("Today's limit is used up. It unlocks at %@.", Fmt.moment(reset)))
+            Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))
         }
         Engine.reconcile(state, now: now)
     }
@@ -106,7 +106,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
             Notify.post(id: "warn.\(id)", title: rule.plan.name,
                         body: L("1 minute until a %@ break.", minutesLabel(rule.plan.breakMinutes)))
         } else {
-            Notify.post(id: "warn.\(id)", title: rule.plan.name, body: L("5 minutes left for today."))
+            Notify.post(id: "warn.\(id)", title: rule.plan.name, body: L("5 minutes left."))
         }
     }
 

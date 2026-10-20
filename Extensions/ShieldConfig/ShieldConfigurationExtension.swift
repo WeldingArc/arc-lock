@@ -30,7 +30,7 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             let reason: String
             switch h.kind {
             case .limit:
-                title = L("Today's limit is used up")
+                title = L("This limit is used up")
                 reason = L("It unlocks at %@.", when)
             case .timeout:
                 title = L("Time for a break")

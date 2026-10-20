@@ -302,7 +302,10 @@ enum Engine {
     @discardableResult
     static func housekeep(now: Date = Date()) -> (ArcState, Bool) {
         var st = StateStore.load()
-        func tidy(_ s: inout ArcState) -> Set<UUID> {
+        func tidy(_ s: inout ArcState) -> (Set<UUID>, Bool) {
+            // a lock-in holds queued changes; a limit's or time-out's change still lands on its own reset (checked
+            // before an ended lock-in is cleared, so the moment it ends can't apply one mid-period)
+            let moved = Pending.holdForLockIn(&s.rules, lockInUntil: s.lockInUntil, calendar: .autoupdatingCurrent)
             if let l = s.lockInUntil, l <= now { s.lockInUntil = nil }
             if let off = s.deletionProtectionOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now {
                 s.deletionProtection = false
@@ -312,19 +315,22 @@ enum Engine {
             if let off = s.strictLockOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now, !strictRunning(s, now: now) {
                 s.strictLock = false
                 s.strictLockOffAt = nil
+                // the scheduled moment (midnight) when on time; the real moment when a running strict block delayed it
+                // (15 minutes of slack, so a late midnight callback still counts as midnight)
+                s.strictOffSince = max(off, now.addingTimeInterval(-15 * 60))
             }
             if let sess = s.session, sess.endsAt <= now { s.session = nil }
-            return Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil)
+            return (Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil), moved)
         }
         var probe = st
-        let due = tidy(&probe)
-        guard !due.isEmpty || probe.session != st.session || probe.lockInUntil != st.lockInUntil
+        let (due, moved) = tidy(&probe)
+        guard !due.isEmpty || moved || probe.session != st.session || probe.lockInUntil != st.lockInUntil
               || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock else { return (st, false) }
         st = StateStore.update { fresh in
-            let ids = tidy(&fresh)
+            let (ids, _) = tidy(&fresh)
             for id in ids {
                 // the change restarts the count; old marks or credit would mean a different limit (e.g. after a
-                // time-zone change applied it mid-day) — start clean rather than risk a false lock
+                // time-zone change applied it mid-day, or a new reset time) — start clean rather than risk a false lock
                 Marks.clear(id)
                 Credits.clear(id)
                 guard !fresh.rules.contains(where: { $0.id == id }) else { continue }
@@ -340,7 +346,7 @@ enum Engine {
     }
 
     /// Whether a block or Block-now session with Strict lock is blocking at `now`.
-    static func strictRunning(_ s: ArcState, now: Date, calendar: Calendar = .current) -> Bool {
+    static func strictRunning(_ s: ArcState, now: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
         if let sess = s.session, sess.endsAt.timeIntervalSince(now) > edge, s.isStrict(sess, now: now) { return true }
         return s.rules.contains { $0.plan.isOn && s.isStrict($0.plan, now: now) && isBlocking($0, now: now, calendar: calendar) }
     }
