@@ -20,10 +20,11 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
 ## What it does
 
 - **Schedules** — lock apps, app categories and websites during set hours on the days you pick (up to 22 hours; overnight windows like 23:00 → 07:00 work too).
-- **Daily limits** — after the time you allow (5 min – 8 h), the apps lock until midnight. Each limit shows exactly how many minutes are used and left today. A heads-up comes 5 minutes before.
-- **Time-outs** — not a full block, a pause: after a stretch of use (5 min – 4 h) the apps take a break (1 min – 2 h), then open again. Repeats all day.
+- **Daily limits** — after the time you allow (5 min – 8 h), the apps lock until the limit resets — at midnight, or at the time you pick (say 4:00 AM, for late nights). Each limit shows exactly how many minutes are used and left. A heads-up comes 5 minutes before.
+- **Time-outs** — not a full block, a pause: after a stretch of use (5 min – 4 h) the apps take a break (1 min – 2 h), then open again. Repeats all day, and starts fresh at its reset time.
 - **Block now** — lock something right away for 15 minutes to 12 hours.
 - **Websites by address** — type `youtube.com` and it's blocked in Safari, Chrome, Brave and every other browser — in schedules, daily limits, time-outs and Block now. (Websites picked in Apple's picker are counted and blocked in Safari, and counted in browsers that share their pages with Screen Time — in Brave, turn on *Settings › Shields & Privacy › Enable Screen Time*.)
+- **Native and in reach** — Apple's own lists and Liquid Glass tab bar (Home · Blocks · Settings), with **Block now** in a glass bar just above the tabs.
 - **Themes and app icons** — five looks (Navy, Graphite, Forest, Plum, Paper), each with a matching app icon. The phone-and-lock mark in the app closes while something is blocked and opens when nothing is.
 - **Strict lock** — on by default, and set per block. While a strict block runs:
   - it can't be edited, stopped or deleted in Arc Lock,
@@ -63,7 +64,7 @@ flowchart TD
 1. **The app** (`App/`) — where you create blocks. Every change goes through one lock policy (below) before it's saved.
 2. **The monitor extension** (`Extensions/Monitor`) — a `DeviceActivityMonitor` that iOS runs in the background. Each schedule or limit is one monitored activity:
    - a **schedule** is a repeating daily interval (e.g. 09:00–17:00); the extension shields when it starts and lifts the shield when it ends. Weekdays are checked in the extension, so one activity covers every day of the week.
-   - a **daily limit** is an all-day interval (00:00–23:59) with usage **events** at every tenth of the allowed time. The 100 % event shields the apps; the others drive the progress bar (iOS reports thresholds, never minutes). A new limit starts counting when it's saved, then from every midnight (`includesPastActivity: false`). When a limit is made stricter mid-day, iOS restarts its count, so Arc Lock registers only what's left — today's use, as far as the tenths prove it, carries over. Because that carry-over rounds down to a tenth, only one such restart is allowed per limit per day; later changes wait for midnight.
+   - a **daily limit** is a day-long interval — from its reset time to a minute before the next (00:00–23:59 by default) — with usage **events** at every tenth of the allowed time. The 100 % event shields the apps; the others drive the progress bar (iOS reports thresholds, never minutes). A new limit starts counting when it's saved, then from every midnight (`includesPastActivity: false`). When a limit is made stricter mid-day, iOS restarts its count, so Arc Lock registers only what's left — today's use, as far as the tenths prove it, carries over. Because that carry-over rounds down to a tenth, only one such restart is allowed per limit per day; later changes wait for midnight.
    - **Guarding against false locks:** iOS sometimes reports a threshold too early (a known issue on iOS 26–27). Time used can't outrun the clock, so a threshold that couldn't have been reached yet is ignored (`Plausibility` in Core) and the limit is re-armed with what's provably used (at most 3 times a day). That stops the common glitch — right after registering — from locking you out; a misreport later in the day can't be told apart from real use.
    - a **time-out** is an all-day interval with one usage event at the allowed stretch. When it fires, the extension shields the apps and starts a one-off activity that ends with the break; its end lifts the shield and re-registers the usage event, so counting starts over. (iOS wants activities of at least 15 minutes, so a short break's activity starts in the past.)
    - a **daily housekeeping** activity at midnight applies changes that were waiting for the next day and ends expired lock-ins.
@@ -90,7 +91,7 @@ All of it lives in [`Core/ArcCore.swift`](Core/ArcCore.swift) — plain Swift wi
 | Rule is… | You can… |
 |---|---|
 | a **running** schedule, a **used-up** limit, a time-out **on a break**, or a **Block now** session — with Strict lock | look, not touch — until it ends |
-| a **daily limit or time-out counting today** — with Strict lock | make it stricter now, once a day (today's use keeps counting); anything else — more time, a shorter break, fewer apps or days, deleting, a second change — waits until midnight |
+| a **daily limit or time-out counting** — with Strict lock | make it stricter now, once per reset (the use so far keeps counting); anything else — more time, a shorter break, fewer apps or days, a new reset time, deleting, a second change — waits for its next reset |
 | any block **without Strict lock** (or with Strict lock switched off in Settings) | change it, stop it or delete it any time |
 | anything during a **lock-in** | add new blocks; existing ones are frozen, strict or not, and changes queued earlier wait until it ends |
 | a schedule **between windows** | change anything — a schedule lasts at most 22 hours, and all schedules together must leave a free hour every day, so there's always such a time (and Arc Lock can always be opened, even if a block includes it) |

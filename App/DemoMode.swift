@@ -7,6 +7,14 @@ import Foundation
 enum Demo {
     static var isOn: Bool { UserDefaults.standard.bool(forKey: "demo") }
     static var shot: String? { UserDefaults.standard.string(forKey: "shot") }
+    /// The tab a screenshot starts on.
+    static var tab: AppTab {
+        switch shot {
+        case "blocks", "limits", "timeouts", "editor", "limit", "timeout": .blocks
+        case "settings", "appearance", "guide": .settings
+        default: .home
+        }
+    }
 
     /// A Monday at 10:30 in the device's time zone, so the sample blocks show every state.
     static var now: Date {

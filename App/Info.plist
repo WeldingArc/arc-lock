@@ -28,14 +28,6 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UIAppFonts</key>
-	<array>
-		<string>Fonts/Pretendard-ExtraLight.otf</string>
-		<string>Fonts/Pretendard-Light.otf</string>
-		<string>Fonts/Pretendard-Regular.otf</string>
-		<string>Fonts/Pretendard-Medium.otf</string>
-		<string>Fonts/Pretendard-SemiBold.otf</string>
-	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

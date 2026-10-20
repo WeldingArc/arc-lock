@@ -77,9 +77,11 @@ enum Monitoring {
                         registration: Registration(kind: .schedule, start: p.start, end: p.end, limit: 0, thresholds: [:],
                                                    creditDay: nil, selection: rule.selection))
         case .limit:
-            let credit = Credits.today(rule.id, now: now, calendar: calendar)
-            let schedule = DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
-                                                  intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true,
+            // the block's own day: from its reset time to the minute before the next one (00:00–23:59 by default)
+            let period = Period.start(containing: now, resetAt: p.resetAt, calendar: calendar)
+            let credit = Credits.today(rule.id, period: period)
+            let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
+                                                  repeats: true,
                                                   warningTime: p.limitMinutes - credit >= 10 ? DateComponents(minute: 5) : nil)
             var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
             var thresholds: [String: Int] = [:]
@@ -89,16 +91,16 @@ enum Monitoring {
                 thresholds[name.rawValue] = t.minutes
             }
             return Plan(schedule: schedule, events: events,
-                        registration: Registration(kind: .limit, start: TimeOfDay(0, 0), end: TimeOfDay(23, 59), limit: p.limitMinutes,
-                                                   thresholds: thresholds, creditDay: credit > 0 ? calendar.startOfDay(for: now) : nil,
+                        registration: Registration(kind: .limit, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
+                                                   thresholds: thresholds, creditDay: credit > 0 ? period : nil,
                                                    selection: rule.selection))
         case .timeout:
             // one threshold: the use allowed before a break, counted from registration (re-registered after each break)
-            let schedule = DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
-                                                  intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true,
+            let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
+                                                  repeats: true,
                                                   warningTime: p.limitMinutes >= 3 ? DateComponents(minute: 1) : nil)
             return Plan(schedule: schedule, events: [Names.limitEvent: event(rule.selection, minutes: p.limitMinutes)],
-                        registration: Registration(kind: .timeout, start: TimeOfDay(0, 0), end: TimeOfDay(23, 59), limit: p.limitMinutes,
+                        registration: Registration(kind: .timeout, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
                                                    thresholds: [Names.limitEvent.rawValue: p.limitMinutes], creditDay: nil,
                                                    selection: rule.selection))
         }
@@ -121,8 +123,9 @@ enum Monitoring {
     /// When a rule's monitor was last (re)registered — today's count starts at the later of this and midnight.
     static func registeredAt(_ id: UUID) -> Date? { AppGroup.defaults.object(forKey: regAtKey(id)) as? Date }
 
-    static func countingSince(_ id: UUID, now: Date = Date(), calendar: Calendar = .current) -> Date {
-        max(calendar.startOfDay(for: now), registeredAt(id) ?? .distantPast)
+    /// When a block's current count began: its last reset, or a later (re-)registration.
+    static func countingSince(_ id: UUID, resetAt: TimeOfDay, now: Date = Date(), calendar: Calendar = .current) -> Date {
+        max(Period.start(containing: now, resetAt: resetAt, calendar: calendar), registeredAt(id) ?? .distantPast)
     }
 
     static func forget(_ id: UUID) {
@@ -173,16 +176,16 @@ enum Monitoring {
     /// today's marks prove was used. At most 3 times a day, so a device that misfires every time can't loop.
     static func rearm(_ rule: Rule, state: ArcState, now: Date = Date(), calendar: Calendar = .current) {
         let key = rearmKey(rule.id)
-        let today = calendar.startOfDay(for: now)
+        let today = Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: calendar)
         var count = 0
-        if let d = AppGroup.defaults.object(forKey: key + ".day") as? Date, calendar.isDate(d, inSameDayAs: now) {
+        if let d = AppGroup.defaults.object(forKey: key + ".day") as? Date, abs(d.timeIntervalSince(today)) < 1 {
             count = AppGroup.defaults.integer(forKey: key)
         }
         guard count < 3 else { return }
         AppGroup.defaults.set(today, forKey: key + ".day")
         AppGroup.defaults.set(count + 1, forKey: key)
-        let used = LimitMath.usedAtLeast(level: Marks.level(rule.id, now: now, calendar: calendar), limit: rule.plan.limitMinutes)
-        Credits.set(rule.id, minutes: max(used, Credits.today(rule.id, now: now, calendar: calendar)), now: now, calendar: calendar)
+        let used = LimitMath.usedAtLeast(level: Marks.level(rule.id, period: today), limit: rule.plan.limitMinutes)
+        Credits.set(rule.id, minutes: max(used, Credits.today(rule.id, period: today)), period: today)
         sync(state, now: now, force: [rule.id])
     }
 
@@ -342,9 +345,10 @@ enum Engine {
         return s.rules.contains { $0.plan.isOn && s.isStrict($0.plan, now: now) && isBlocking($0, now: now, calendar: calendar) }
     }
 
-    /// Whether `now` falls on a day this limit or time-out counts.
+    /// Whether `now` falls in a period (day, from the block's reset time) this limit or time-out counts.
     static func counts(_ rule: Rule, now: Date, calendar: Calendar = .current) -> Bool {
-        rule.plan.isOn && rule.plan.kind.countsUse && rule.plan.days.contains(calendar.component(.weekday, from: now))
+        rule.plan.isOn && rule.plan.kind.countsUse
+            && rule.plan.days.contains(Period.weekday(containing: now, resetAt: rule.plan.resetAt, calendar: calendar))
     }
 }
 

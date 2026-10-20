@@ -12,6 +12,9 @@ public struct TimeOfDay: Codable, Hashable, Comparable, Sendable {
     public var minutes: Int { hour * 60 + minute }
     public var components: DateComponents { DateComponents(hour: hour, minute: minute) }
     public static func < (a: TimeOfDay, b: TimeOfDay) -> Bool { a.minutes < b.minutes }
+    public static let midnight = TimeOfDay(0, 0)
+    /// The minute before this one, wrapping past midnight (a block's "day" ends a minute before its next reset).
+    public var minuteBefore: TimeOfDay { let m = (minutes + 24 * 60 - 1) % (24 * 60); return TimeOfDay(m / 60, m % 60) }
 }
 
 public enum RuleKind: String, Codable, CaseIterable, Sendable {
@@ -38,18 +41,20 @@ public struct RulePlan: Codable, Hashable, Sendable {
     public var breakMinutes: Int
     /// Strict lock: while it runs this block can't be stopped or loosened (if Strict lock is on in Settings).
     public var strict: Bool
+    /// Daily limits and time-outs: when the count starts over (12:00 AM unless the user picks another time).
+    public var resetAt: TimeOfDay
 
     public init(name: String = "", kind: RuleKind = .schedule, isOn: Bool = true,
                 start: TimeOfDay = TimeOfDay(9, 0), end: TimeOfDay = TimeOfDay(17, 0),
                 days: Set<Int> = Set(1...7), limitMinutes: Int = 30, domains: [String] = [],
-                breakMinutes: Int = 10, strict: Bool = true) {
+                breakMinutes: Int = 10, strict: Bool = true, resetAt: TimeOfDay = .midnight) {
         self.name = name; self.kind = kind; self.isOn = isOn; self.start = start; self.end = end
         self.days = days; self.limitMinutes = limitMinutes; self.domains = domains
-        self.breakMinutes = breakMinutes; self.strict = strict
+        self.breakMinutes = breakMinutes; self.strict = strict; self.resetAt = resetAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, kind, isOn, start, end, days, limitMinutes, domains, breakMinutes, strict
+        case name, kind, isOn, start, end, days, limitMinutes, domains, breakMinutes, strict, resetAt
     }
 
     /// Fields added in later versions fall back to their defaults, so saved blocks always load.
@@ -65,6 +70,7 @@ public struct RulePlan: Codable, Hashable, Sendable {
         domains = (try? c.decode([String].self, forKey: .domains)) ?? []
         breakMinutes = (try? c.decode(Int.self, forKey: .breakMinutes)) ?? 10
         strict = (try? c.decode(Bool.self, forKey: .strict)) ?? true
+        resetAt = (try? c.decode(TimeOfDay.self, forKey: .resetAt)) ?? .midnight
     }
 }
 
@@ -149,6 +155,28 @@ public enum ScheduleMath {
     }
 }
 
+/// A daily limit's or time-out's own day: from its reset time to the next reset (12:00 AM to 12:00 AM by default).
+public enum Period {
+    /// The reset that started the period containing `date`.
+    public static func start(containing date: Date, resetAt: TimeOfDay, calendar: Calendar) -> Date {
+        let today = calendar.startOfDay(for: date)
+        if let r = ScheduleMath.moment(resetAt, on: today, calendar: calendar), r <= date { return r }
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        return ScheduleMath.moment(resetAt, on: yesterday, calendar: calendar) ?? yesterday
+    }
+    /// The next reset after `date`.
+    public static func end(after date: Date, resetAt: TimeOfDay, calendar: Calendar) -> Date {
+        let start = start(containing: date, resetAt: resetAt, calendar: calendar)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: start))!
+        let end = ScheduleMath.moment(resetAt, on: nextDay, calendar: calendar) ?? nextDay
+        return end > date ? end : calendar.date(byAdding: .day, value: 1, to: end)!
+    }
+    /// The weekday a period counts as: the day it started on (a 4 AM reset makes 2 AM Tuesday part of Monday).
+    public static func weekday(containing date: Date, resetAt: TimeOfDay, calendar: Calendar) -> Int {
+        calendar.component(.weekday, from: start(containing: date, resetAt: resetAt, calendar: calendar))
+    }
+}
+
 // MARK: - Status
 
 public enum RuleStatus: Equatable, Sendable {
@@ -190,16 +218,16 @@ public enum Status {
         guard plan.isOn else { return .off }
         switch plan.kind {
         case .timeout:
-            guard plan.days.contains(calendar.component(.weekday, from: now)) else { return .resting }
+            guard plan.days.contains(Period.weekday(containing: now, resetAt: plan.resetAt, calendar: calendar)) else { return .resting }
             if let b = breakUntil, b > now { return .onBreak(until: b) }
             return .counting
         case .schedule:
             if let w = ScheduleMath.window(containing: now, plan: plan, calendar: calendar) { return .running(until: w.end) }
             return .waiting(next: ScheduleMath.nextWindow(after: now, plan: plan, calendar: calendar)?.start)
         case .limit:
-            guard plan.days.contains(calendar.component(.weekday, from: now)) else { return .resting }
-            if let r = reachedAt, calendar.isDate(r, inSameDayAs: now) {
-                return .reached(until: ScheduleMath.startOfNextDay(after: now, calendar: calendar))
+            guard plan.days.contains(Period.weekday(containing: now, resetAt: plan.resetAt, calendar: calendar)) else { return .resting }
+            if let r = reachedAt, r >= Period.start(containing: now, resetAt: plan.resetAt, calendar: calendar), r <= now {
+                return .reached(until: Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
             }
             return .counting
         }
@@ -213,7 +241,8 @@ public enum LockReason: String, Codable, Sendable { case running, reached, sessi
 public enum EditAccess: Equatable, Sendable {
     /// Any change applies now.
     case free
-    /// A daily limit that is counting today: stricter changes apply now, looser ones from `loosenFrom` (next midnight).
+    /// A daily limit or time-out that is counting: stricter changes apply now, looser ones from `loosenFrom` (its next
+    /// reset).
     case stricterOnly(loosenFrom: Date)
     /// Read-only until `until`.
     case locked(until: Date, reason: LockReason)
@@ -222,8 +251,9 @@ public enum EditAccess: Equatable, Sendable {
 public enum Policy {
     /// `strict` = this block's Strict lock and the global Strict lock are both on. A lock-in freezes every block,
     /// strict or not; otherwise a block that isn't strict can always be changed, stopped or deleted.
+    /// `nextReset` = when a counting limit or time-out starts over (default: the next midnight).
     public static func access(status: RuleStatus, lockInUntil: Date?, strict: Bool = true, now: Date,
-                              calendar: Calendar) -> EditAccess {
+                              calendar: Calendar, nextReset: Date? = nil) -> EditAccess {
         let lockIn = lockInActive(lockInUntil, now: now)
         if !strict && !lockIn { return .free }
         var lock: (Date, LockReason)?
@@ -236,7 +266,7 @@ public enum Policy {
         if let l = lockInUntil, l > now, l > (lock?.0 ?? .distantPast) { lock = (l, .lockIn) }
         if let (until, reason) = lock { return .locked(until: until, reason: reason) }
         if case .counting = status {
-            return .stricterOnly(loosenFrom: ScheduleMath.startOfNextDay(after: now, calendar: calendar))
+            return .stricterOnly(loosenFrom: nextReset ?? ScheduleMath.startOfNextDay(after: now, calendar: calendar))
         }
         return .free
     }
@@ -261,6 +291,8 @@ public enum Change {
         let oldDomains = Set(old.domains), newDomains = Set(new.domains)
         if !newDomains.isSuperset(of: oldDomains) { looser = true }
         if !oldDomains.isSuperset(of: newDomains) { stricter = true }
+        // a different reset time can start a fresh count sooner: treat it as looser (it waits for the next reset)
+        if new.kind.countsUse && new.resetAt != old.resetAt { looser = true }
         switch new.kind {
         case .limit:
             if new.limitMinutes > old.limitMinutes { looser = true }

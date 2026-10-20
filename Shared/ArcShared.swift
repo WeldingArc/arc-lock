@@ -155,19 +155,19 @@ enum Marks {
         guard let d = AppGroup.defaults.data(forKey: key(id)) else { return nil }
         return try? JSONDecoder().decode(UsageMark.self, from: d)
     }
-    /// Today's level (0 when nothing was recorded today).
-    static func level(_ id: UUID, now: Date = Date(), calendar: Calendar = .current) -> Int {
-        guard let m = get(id), calendar.isDate(m.day, inSameDayAs: now) else { return 0 }
+    /// The level in the block's current period (0 when nothing was recorded since its last reset).
+    static func level(_ id: UUID, period: Date) -> Int {
+        guard let m = get(id), abs(m.day.timeIntervalSince(period)) < 1 else { return 0 }
         return m.level
     }
     static func reachedAt(_ id: UUID) -> Date? {
         guard let m = get(id), m.level >= 10 else { return nil }
         return m.at
     }
-    static func raise(_ id: UUID, to level: Int, now: Date = Date(), calendar: Calendar = .current) {
-        let today = calendar.startOfDay(for: now)
-        if let m = get(id), calendar.isDate(m.day, inSameDayAs: now), m.level >= level { return }
-        if let d = try? JSONEncoder().encode(UsageMark(day: today, level: level, at: now)) {
+    /// `period` = when the block's current period began (Period.start); marks from an earlier period don't count.
+    static func raise(_ id: UUID, to level: Int, now: Date = Date(), period: Date) {
+        if let m = get(id), abs(m.day.timeIntervalSince(period)) < 1, m.level >= level { return }
+        if let d = try? JSONEncoder().encode(UsageMark(day: period, level: level, at: now)) {
             AppGroup.defaults.set(d, forKey: key(id))
         }
     }
@@ -182,15 +182,15 @@ struct UsageCredit: Codable, Equatable {
 
 enum Credits {
     private static func key(_ id: UUID) -> String { "credit.\(id.uuidString)" }
-    /// Today's credit for a rule (0 when none or from an earlier day).
-    static func today(_ id: UUID, now: Date = Date(), calendar: Calendar = .current) -> Int {
+    /// The credit in the block's current period (0 when none or from an earlier one).
+    static func today(_ id: UUID, period: Date) -> Int {
         guard let d = AppGroup.defaults.data(forKey: key(id)), let c = try? JSONDecoder().decode(UsageCredit.self, from: d),
-              calendar.isDate(c.day, inSameDayAs: now) else { return 0 }
+              abs(c.day.timeIntervalSince(period)) < 1 else { return 0 }
         return c.minutes
     }
-    static func set(_ id: UUID, minutes: Int, now: Date = Date(), calendar: Calendar = .current) {
+    static func set(_ id: UUID, minutes: Int, period: Date) {
         guard minutes > 0 else { clear(id); return }
-        if let d = try? JSONEncoder().encode(UsageCredit(day: calendar.startOfDay(for: now), minutes: minutes)) {
+        if let d = try? JSONEncoder().encode(UsageCredit(day: period, minutes: minutes)) {
             AppGroup.defaults.set(d, forKey: key(id))
         }
     }
@@ -201,9 +201,10 @@ enum Credits {
 /// carried-over use is rounded down to a tenth, so only one restart a day is allowed; later ones wait for midnight.
 enum Restarts {
     private static func key(_ id: UUID) -> String { "restart.\(id.uuidString)" }
-    static func happenedToday(_ id: UUID, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+    /// Whether the count was restarted since the block's last reset (`period` = Period.start).
+    static func happenedToday(_ id: UUID, period: Date, now: Date = Date()) -> Bool {
         guard let d = AppGroup.defaults.object(forKey: key(id)) as? Date else { return false }
-        return calendar.isDate(d, inSameDayAs: now)
+        return d >= period && d <= now
     }
     static func mark(_ id: UUID, now: Date = Date()) { AppGroup.defaults.set(now, forKey: key(id)) }
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }

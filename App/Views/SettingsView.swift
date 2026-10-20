@@ -1,67 +1,106 @@
 import SwiftUI
-
 import UIKit
 
-struct SettingsView: View {
+/// Settings as a native form: Strict lock, deletion protection, heads-ups, Appearance (theme and app icon), About.
+struct SettingsTab: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
     @State private var showGuide = false
     @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
-    @State private var icon = SettingsView.currentIcon
+    @State private var icon = SettingsTab.currentIcon
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Backdrop()
-                ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 18) {
-                        strictCard
-                        protectionCard
-                        Card {
-                            Toggle(isOn: Binding(get: { model.state.headsUp }, set: { model.setHeadsUp($0) })) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("Heads-up notifications").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                                    Text("Before a block starts, a daily limit runs out, or a time-out's break begins").font(.p(14, .regular)).foregroundStyle(Palette.muted)
-                                }
-                            }
-                            .tint(Palette.brass)
-                        }
-                        appearanceCard
-                            .id("appearance")
-                        aboutCard
+            ScrollViewReader { proxy in
+                Form {
+                    strictSection
+                    protectionSection
+                    Section {
+                        Toggle("Heads-up notifications", isOn: Binding(get: { model.state.headsUp }, set: { model.setHeadsUp($0) }))
+                    } footer: {
+                        Text("Before a block starts, a daily limit runs out, or a time-out's break begins.")
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
+                    .listRowBackground(Palette.card)
+                    appearanceSection
+                        .id("appearance")
+                    aboutSection
                 }
-                .id(themeRaw)            // redraw in the new theme
+                .themedList()
+                .navigationTitle("Settings")
                 #if DEBUG
                 .task {
                     if Demo.shot == "appearance" { try? await Task.sleep(for: .milliseconds(400)); proxy.scrollTo("appearance", anchor: .top) }
+                    if Demo.shot == "guide" { showGuide = true }
                 }
                 #endif
-                }
             }
-            .navigationTitle(Text("Settings"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $showGuide) { HarderGuide() }
         }
-        .presentationBackground(Palette.night)
-        #if DEBUG
-        .onAppear {
-            if Demo.shot == "guide" { showGuide = true }
+    }
+
+    // MARK: Strict lock & deletion protection
+
+    private var strictSection: some View {
+        Section {
+            Toggle("Strict lock", isOn: Binding(get: { model.state.strictLock && model.state.strictLockOffAt == nil },
+                                                set: { on in
+                                                    switch model.setStrictLock(on) {
+                                                    case .refused(let why): model.problem = why
+                                                    case .scheduled(let at): model.toast = String(localized: "Strict lock turns off at \(Fmt.moment(at, now: model.now)).")
+                                                    case .saved: break
+                                                    }
+                                                }))
+            if model.state.strictLock, let off = model.state.strictLockOffAt {
+                let at = model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off
+                HStack {
+                    Text(at <= model.now ? String(localized: "Turns off when the strict blocks running now end")
+                                         : String(localized: "Turns off at \(Fmt.moment(at, now: model.now))"))
+                        .foregroundStyle(Palette.brass)
+                    Spacer()
+                    Button("Keep it on") { _ = model.setStrictLock(true) }.buttonStyle(.borderless)
+                }
+                .font(.p(15, .regular, .subheadline))
+            }
+        } footer: {
+            Text(model.state.strictLock
+                 ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off takes effect at midnight, after any strict block running then has ended."
+                 : "Off: every block can be stopped or changed any time. Lock-in needs it on.")
         }
-        #endif
+        .listRowBackground(Palette.card)
+    }
+
+    private var protectionSection: some View {
+        Section {
+            Toggle("Deletion protection", isOn: Binding(get: { model.state.deletionProtection && model.state.deletionProtectionOffAt == nil },
+                                                        set: { on in
+                                                            switch model.setDeletionProtection(on) {
+                                                            case .refused(let why): model.problem = why
+                                                            case .scheduled(let at): model.toast = String(localized: "Deletion protection turns off at \(Fmt.moment(at, now: model.now)).")
+                                                            case .saved: break
+                                                            }
+                                                        }))
+            if model.state.deletionProtection, let off = model.state.deletionProtectionOffAt {
+                HStack {
+                    Text("Turns off at \(Fmt.moment(model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off, now: model.now))")
+                        .foregroundStyle(Palette.brass)
+                    Spacer()
+                    Button("Keep it on") { _ = model.setDeletionProtection(true) }.buttonStyle(.borderless)
+                }
+                .font(.p(15, .regular, .subheadline))
+            }
+        } footer: {
+            Text(model.state.strictLock
+                 ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight."
+                 : "No app can be deleted from this iPhone, Arc Lock included.")
+        }
+        .listRowBackground(Palette.card)
     }
 
     // MARK: appearance
 
-    private var appearanceCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Eyebrow("Appearance", color: Palette.muted)
-                Text("Theme").font(.p(15, .medium)).foregroundStyle(Palette.ink)
+    private var appearanceSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Theme")
                 HStack(spacing: 2) {
                     ForEach(ArcTheme.allCases) { t in
                         let on = t.rawValue == themeRaw
@@ -74,13 +113,15 @@ struct SettingsView: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderless)
                         .accessibilityLabel(Text(t.name))
                         .accessibilityAddTraits(on ? .isSelected : [])
                     }
                 }
-                Rectangle().fill(Palette.line).frame(height: 1).padding(.vertical, 2)
-                Text("App icon").font(.p(15, .medium)).foregroundStyle(Palette.ink)
+            }
+            .padding(.vertical, 6)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("App icon")
                 HStack(spacing: 2) {
                     ForEach(ArcTheme.allCases) { t in
                         let on = t == icon
@@ -96,15 +137,19 @@ struct SettingsView: View {
                                     .strokeBorder(on ? Palette.brass : .clear, lineWidth: 2))
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderless)
                         .accessibilityLabel(Text("\(t.name) icon"))
                         .accessibilityAddTraits(on ? .isSelected : [])
                     }
                 }
-                Text("iOS shows a short message when the icon changes.")
-                    .font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
             }
+            .padding(.vertical, 6)
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("iOS shows a short message when the icon changes.")
         }
+        .listRowBackground(Palette.card)
     }
 
     private static var currentIcon: ArcTheme {
@@ -121,102 +166,37 @@ struct SettingsView: View {
         }
     }
 
-    private var strictCard: some View {
-        Card(glow: model.state.strictLock) {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle(isOn: Binding(get: { model.state.strictLock && model.state.strictLockOffAt == nil },
-                                     set: { on in
-                                         switch model.setStrictLock(on) {
-                                         case .refused(let why): model.problem = why
-                                         case .scheduled(let at): model.toast = String(localized: "Strict lock turns off at \(Fmt.moment(at, now: model.now)).")
-                                         case .saved: break
-                                         }
-                                     })) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Strict lock").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                        Text(model.state.strictLock
-                             ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off takes effect at midnight, after any strict block running then has ended."
-                             : "Off: every block can be stopped or changed any time. Lock-in needs it on.")
-                            .font(.p(14, .regular)).foregroundStyle(Palette.muted)
-                    }
-                }
-                .tint(Palette.brass)
-                if model.state.strictLock, let off = model.state.strictLockOffAt {
-                    let at = model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off
-                    HStack {
-                        Text(at <= model.now ? String(localized: "Turns off when the strict blocks running now end")
-                                             : String(localized: "Turns off at \(Fmt.moment(at, now: model.now))"))
-                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
-                        Spacer()
-                        Button("Keep it on") { _ = model.setStrictLock(true) }
-                            .font(.p(14, .medium)).foregroundStyle(Palette.brass)
-                    }
-                }
-            }
-        }
-    }
+    // MARK: about
 
-    private var protectionCard: some View {
-        Card(glow: model.state.deletionProtection) {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle(isOn: Binding(get: { model.state.deletionProtection && model.state.deletionProtectionOffAt == nil },
-                                     set: { on in
-                                         switch model.setDeletionProtection(on) {
-                                         case .refused(let why): model.problem = why
-                                         case .scheduled(let at): model.toast = String(localized: "Deletion protection turns off at \(Fmt.moment(at, now: model.now)).")
-                                         case .saved: break
-                                         }
-                                     })) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Deletion protection").font(.p(17, .regular)).foregroundStyle(Palette.ink)
-                        Text(model.state.strictLock
-                             ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight."
-                             : "No app can be deleted from this iPhone, Arc Lock included.")
-                            .font(.p(14, .regular)).foregroundStyle(Palette.muted)
-                    }
+    private var aboutSection: some View {
+        Section {
+            link("How Arc Lock works", "https://github.com/WeldingArc/arc-lock#how-it-works")
+            link("Source code (MIT)", "https://github.com/WeldingArc/arc-lock")
+            link("Privacy: nothing leaves this iPhone", "https://github.com/WeldingArc/arc-lock/blob/main/PRIVACY.md")
+            link("Report a problem", "https://github.com/WeldingArc/arc-lock/issues")
+            Button { showGuide = true } label: {
+                HStack {
+                    Text("Extra protection with a friend").foregroundStyle(Palette.ink)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
                 }
-                .tint(Palette.brass)
-                if model.state.deletionProtection, let off = model.state.deletionProtectionOffAt {
-                    HStack {
-                        Text("Turns off at \(Fmt.moment(model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off, now: model.now))")
-                            .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
-                        Spacer()
-                        Button("Keep it on") { _ = model.setDeletionProtection(true) }
-                            .font(.p(14, .medium)).foregroundStyle(Palette.brass)
-                    }
-                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+        } header: {
+            Text("About")
+        } footer: {
+            Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Open source, no account, no ads.")
         }
-    }
-
-    private var aboutCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Eyebrow("About", color: Palette.muted)
-                link("How Arc Lock works", "https://github.com/WeldingArc/arc-lock#how-it-works")
-                link("Source code (MIT)", "https://github.com/WeldingArc/arc-lock")
-                link("Privacy: nothing leaves this iPhone", "https://github.com/WeldingArc/arc-lock/blob/main/PRIVACY.md")
-                link("Report a problem", "https://github.com/WeldingArc/arc-lock/issues")
-                Button { showGuide = true } label: {
-                    HStack {
-                        Text("Extra protection with a friend").font(.p(16, .regular)).foregroundStyle(Palette.ink)
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(Palette.faint)
-                    }
-                }
-                .buttonStyle(.plain)
-                Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Open source, no account, no ads. Pretendard font under the SIL Open Font License.")
-                    .font(.p(12, .regular, .caption)).foregroundStyle(Palette.faint)
-            }
-        }
+        .listRowBackground(Palette.card)
     }
 
     private func link(_ title: LocalizedStringKey, _ url: String) -> some View {
         Link(destination: URL(string: url)!) {
             HStack {
-                Text(title).font(.p(16, .regular)).foregroundStyle(Palette.ink)
+                Text(title).foregroundStyle(Palette.ink)
                 Spacer()
-                Image(systemName: "arrow.up.right").font(.system(size: 13)).foregroundStyle(Palette.faint)
+                Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
             }
         }
     }

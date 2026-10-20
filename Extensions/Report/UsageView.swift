@@ -40,7 +40,7 @@ struct UsageView: View {
                 .frame(height: 5)
             }
             Text(caption)
-                .font(.custom("Pretendard-Regular", size: 12, relativeTo: .caption))
+                .font(.caption)
                 .foregroundStyle(Self.faint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

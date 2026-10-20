@@ -336,6 +336,51 @@ struct CoreTests {
         check(Capacity.fits(Array(repeating: shorts, count: 9) + [offShorts]), "a switched-off time-out needs no monitor")
         check(!Capacity.fits(Array(repeating: limitPlan, count: 18) + [offShorts]), "but every block keeps a slot (18 max)")
 
+        // 1.1: a block's own reset time
+        let four = TimeOfDay(4, 0)
+        check(TimeOfDay.midnight.minuteBefore == TimeOfDay(23, 59) && four.minuteBefore == TimeOfDay(3, 59), "minute before wraps")
+        let tue2 = date("2026-10-13 02:00", seoul), tue5 = date("2026-10-13 05:00", seoul)
+        check(Period.start(containing: tue2, resetAt: four, calendar: seoul) == date("2026-10-12 04:00", seoul), "2 AM belongs to the period that began at 4 AM yesterday")
+        check(Period.end(after: tue2, resetAt: four, calendar: seoul) == date("2026-10-13 04:00", seoul), "…and ends at 4 AM today")
+        check(Period.start(containing: tue5, resetAt: four, calendar: seoul) == date("2026-10-13 04:00", seoul), "5 AM is in today's period")
+        check(Period.end(after: tue5, resetAt: four, calendar: seoul) == date("2026-10-14 04:00", seoul), "…which ends at 4 AM tomorrow")
+        check(Period.start(containing: date("2026-10-13 04:00", seoul), resetAt: four, calendar: seoul) == date("2026-10-13 04:00", seoul), "the reset minute starts the new period")
+        check(Period.weekday(containing: tue2, resetAt: four, calendar: seoul) == 2, "2 AM Tuesday counts as Monday")
+        check(Period.start(containing: tue2, resetAt: .midnight, calendar: seoul) == date("2026-10-13 00:00", seoul)
+              && Period.end(after: tue2, resetAt: .midnight, calendar: seoul) == date("2026-10-14 00:00", seoul), "midnight reset = the calendar day")
+        let late = RulePlan(name: "Social", kind: .limit, days: [2], limitMinutes: 60, resetAt: four)   // Mondays only
+        check(Status.of(late, now: tue2, reachedAt: nil, calendar: seoul) == .counting, "Monday's limit still counts at 2 AM Tuesday")
+        check(Status.of(late, now: tue5, reachedAt: nil, calendar: seoul) == .resting, "…and rests after the 4 AM reset")
+        let usedUpAt1 = date("2026-10-13 01:00", seoul)
+        check(Status.of(late, now: tue2, reachedAt: usedUpAt1, calendar: seoul) == .reached(until: date("2026-10-13 04:00", seoul)),
+              "used up at 1 AM locks until the 4 AM reset")
+        var everyDay = late; everyDay.days = Set(1...7)
+        check(Status.of(everyDay, now: tue5, reachedAt: usedUpAt1, calendar: seoul) == .counting, "after the reset it counts again")
+        check(Status.of(everyDay, now: date("2026-10-12 23:00", seoul), reachedAt: date("2026-10-12 22:00", seoul), calendar: seoul)
+              == .reached(until: date("2026-10-13 04:00", seoul)), "used up at 10 PM stays locked past midnight, until 4 AM")
+        let lateTimeout = RulePlan(name: "Shorts", kind: .timeout, days: [2], limitMinutes: 20, breakMinutes: 10, resetAt: four)
+        check(Status.of(lateTimeout, now: tue2, reachedAt: nil, calendar: seoul) == .counting, "a Monday time-out still counts at 2 AM Tuesday")
+        check(Policy.access(status: .counting, lockInUntil: nil, now: tue2, calendar: seoul, nextReset: date("2026-10-13 04:00", seoul))
+              == .stricterOnly(loosenFrom: date("2026-10-13 04:00", seoul)), "looser changes wait for the block's own reset")
+        var resetLater = everyDay; resetLater.resetAt = TimeOfDay(6, 0)
+        check(Change.direction(from: everyDay, to: resetLater) == .looser, "a new reset time waits for the next reset")
+        if let p = try? JSONDecoder().decode(RulePlan.self, from: Data(old.utf8)) {
+            check(p.resetAt == .midnight, "older saved plans reset at midnight")
+        } else { check(false, "older plans decode") }
+        if let back = try? JSONDecoder().decode(RulePlan.self, from: JSONEncoder().encode(late)) {
+            check(back.resetAt == four, "reset time round-trips")
+        } else { check(false, "reset time round-trips") }
+        // daylight saving: a 2:30 AM reset on the night the clocks skip 2–3 AM still gives sane, increasing periods
+        let nyc = calendar("America/New_York")
+        let springNight = date("2026-03-08 01:30", nyc)
+        let half2 = TimeOfDay(2, 30)
+        let s0 = Period.start(containing: springNight, resetAt: half2, calendar: nyc)
+        let e0 = Period.end(after: springNight, resetAt: half2, calendar: nyc)
+        check(s0 <= springNight && e0 > springNight && e0.timeIntervalSince(s0) > 20 * 3600 && e0.timeIntervalSince(s0) < 26 * 3600,
+              "spring-forward night: the period still contains now and lasts about a day")
+        let after = Period.end(after: e0, resetAt: half2, calendar: nyc)
+        check(after > e0, "the next reset after the skipped hour comes later")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

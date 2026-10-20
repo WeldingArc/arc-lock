@@ -1,5 +1,5 @@
-// Arc family look: a deep background, one accent, Pretendard in thin weights, centered and roomy. The colors come from
-// the chosen theme (Shared/Themes.swift); `brass` is the theme's accent (it's brass in the original Navy theme).
+// Arc Lock's look: Apple's native lists, navigation and Liquid Glass tab bar in the system font, colored by the chosen
+// theme (Shared/Themes.swift); `brass` is the theme's accent (it's brass in the original Navy theme).
 import FamilyControls
 import ManagedSettings
 import SwiftUI
@@ -33,15 +33,49 @@ extension Color {
     }
 }
 
-enum PWeight: String {
-    case extraLight = "Pretendard-ExtraLight", light = "Pretendard-Light", regular = "Pretendard-Regular"
-    case medium = "Pretendard-Medium", semibold = "Pretendard-SemiBold"
+enum PWeight {
+    case extraLight, light, regular, medium, semibold
+    var system: Font.Weight {
+        switch self {
+        case .extraLight: .thin
+        case .light: .light
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        }
+    }
 }
 
 extension Font {
-    /// Pretendard that still follows the reader's text size setting.
+    /// Apple's system font (San Francisco), scaled with the reader's text size like `style`. The root view redraws
+    /// when the text size changes (RootView), so every size follows it.
     static func p(_ size: CGFloat, _ weight: PWeight = .regular, _ style: Font.TextStyle = .body) -> Font {
-        .custom(weight.rawValue, size: size, relativeTo: style)
+        .system(size: UIFontMetrics(forTextStyle: style.uiKit).scaledValue(for: size), weight: weight.system)
+    }
+}
+
+extension Font.TextStyle {
+    var uiKit: UIFont.TextStyle {
+        switch self {
+        case .largeTitle: .largeTitle
+        case .title: .title1
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption: .caption1
+        case .caption2: .caption2
+        default: .body
+        }
+    }
+}
+
+extension View {
+    /// A native list or form on the theme's background (rows use `.listRowBackground(Palette.card)`).
+    func themedList() -> some View {
+        scrollContentBackground(.hidden).background(Backdrop())
     }
 }
 

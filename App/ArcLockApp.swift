@@ -19,6 +19,7 @@ struct ArcLockApp: App {
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         ZStack {
@@ -32,15 +33,14 @@ struct RootView: View {
                 } else if !model.isAuthorized {
                     AccessOffView()
                 } else {
-                    HomeView()
+                    MainTabView()
                 }
             }
-            // a new theme redraws every screen; Settings stays open because it's presented from here
-            .id(themeRaw)
+            // a new theme or text size redraws every screen (the chosen tab is kept in the model)
+            .id("\(themeRaw)|\(typeSize)")
         }
         .preferredColorScheme(ArcTheme(rawValue: themeRaw)?.isLight == true ? .light : .dark)
         .tint(Palette.brass)
-        .sheet(isPresented: $model.showSettings) { SettingsView().environmentObject(model) }
         .animation(.easeInOut(duration: 0.35), value: model.state.onboarded)
         .alert(String(localized: "Arc Lock"), isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
             Button("OK", role: .cancel) {}

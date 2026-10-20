@@ -9,8 +9,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
         super.intervalDidStart(for: activity)
         Diag.log("start \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
-        // The daily monitor also re-registers limits whose thresholds were only meant for yesterday.
-        if activity == Names.daily || changed { Monitoring.sync(state) }
+        // The daily monitor, and a block's own reset (its interval start), re-register limits whose thresholds were
+        // only meant for the period that just ended.
+        if activity == Names.daily || Names.ruleID(activity) != nil || changed { Monitoring.sync(state) }
         Monitoring.finishBreaks(state)
         Engine.reconcile(state)
     }
@@ -62,8 +63,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
         // iOS sometimes reports a threshold early (right after registering, or twice). Time used can't outrun the
         // clock, so a threshold that couldn't have been reached yet is ignored. iOS won't send that event again
         // today, so a too-early limit restarts its count from what today's marks prove.
-        guard Plausibility.thresholdIsReal(minutes: minutes, countingSince: Monitoring.countingSince(id, now: now), now: now) else {
-            Diag.log("  → too early (\(minutes) min since \(Monitoring.countingSince(id, now: now))): re-arm")
+        let since = Monitoring.countingSince(id, resetAt: rule.plan.resetAt, now: now)
+        guard Plausibility.thresholdIsReal(minutes: minutes, countingSince: since, now: now) else {
+            Diag.log("  → too early (\(minutes) min since \(since)): re-arm")
             if tenth >= 10 { Monitoring.rearm(rule, state: state, now: now) }
             return
         }
@@ -78,12 +80,13 @@ final class ActivityMonitor: DeviceActivityMonitor {
             return
         }
         Diag.log("  → limit at tenth \(tenth)")
-        Marks.raise(id, to: tenth, now: now)
+        Marks.raise(id, to: tenth, now: now, period: Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: .current))
         if tenth >= 10 {
             if let store = Engine.store(for: id, in: state) {
                 Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule.plan, now: now))
             }
-            Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("Today's limit is used up. It unlocks at midnight."))
+            let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
+            Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("Today's limit is used up. It unlocks at %@.", Fmt.moment(reset)))
         }
         Engine.reconcile(state, now: now)
     }
@@ -97,7 +100,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
               let minutes = Monitoring.registration(id)?.thresholds[event.rawValue],
               // the warning comes 5 minutes before the limit, so the same clock check applies
               Plausibility.thresholdIsReal(minutes: max(1, minutes - (rule.plan.kind == .timeout ? 1 : 5)),
-                                           countingSince: Monitoring.countingSince(id, now: now), now: now)
+                                           countingSince: Monitoring.countingSince(id, resetAt: rule.plan.resetAt, now: now), now: now)
         else { return }
         if rule.plan.kind == .timeout {
             Notify.post(id: "warn.\(id)", title: rule.plan.name,

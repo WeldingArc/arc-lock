@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.3"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "9"
     DEVELOPMENT_TEAM: 446W55N7PB
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
@@ -32,16 +32,11 @@ targets:
       - path: Shared
       - path: Core
       - path: Extensions/Report/UsageView.swift
-      - path: App/Fonts
-        type: folder
-        buildPhase: resources
       - path: App/PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
         buildPhase: resources
       - path: App/Resources/en.lproj
-        buildPhase: resources
-      - path: licenses/Pretendard-OFL.txt
         buildPhase: resources
       - path: LICENSE
         buildPhase: resources
@@ -144,8 +139,6 @@ targets:
         excludes: ["Info.plist", "*.entitlements"]
       - path: Shared
       - path: Core
-      - path: App/Fonts/Pretendard-Regular.otf
-        buildPhase: resources
       - path: Extensions/PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings

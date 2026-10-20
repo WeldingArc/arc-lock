@@ -14,8 +14,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var auth = AuthorizationCenter.shared.authorizationStatus
     @Published private(set) var now = Date()
     @Published var toast: String?
-    /// Settings is presented from the root, so it stays open while a new theme redraws the screens below it.
-    @Published var showSettings = false
+    /// The selected tab, kept here so a theme change (which redraws every screen) stays on Settings.
+    @Published var tab: AppTab = .home
     @Published var problem: String?
     /// False until this launch has confirmed Screen Time access (a fresh process can read "not determined" at first).
     @Published private(set) var authChecked = false
@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
         #if DEBUG
         if Demo.isOn {
             if let t = UserDefaults.standard.string(forKey: "theme").flatMap(ArcTheme.init(rawValue:)) { ArcTheme.current = t }
+            tab = Demo.tab
             demo = true
             state = Demo.state()
             now = Demo.now
@@ -116,7 +117,8 @@ final class AppModel: ObservableObject {
         return Marks.reachedAt(id)
     }
     func access(_ r: Rule) -> EditAccess {
-        Policy.access(status: status(r), lockInUntil: state.lockInUntil, strict: state.isStrict(r.plan, now: now), now: now, calendar: calendar)
+        Policy.access(status: status(r), lockInUntil: state.lockInUntil, strict: state.isStrict(r.plan, now: now), now: now, calendar: calendar,
+                      nextReset: r.plan.kind.countsUse ? nextReset(r.plan) : nil)
     }
     /// A running block (or break) that may be stopped by hand: not strict, or Strict lock is off in Settings.
     func canStop(_ r: Rule) -> Bool { status(r).isBlocking && access(r) == .free }
@@ -126,9 +128,12 @@ final class AppModel: ObservableObject {
         #if DEBUG
         if demo { return Demo.level(r.id) }
         #endif
-        return Marks.level(r.id, now: now, calendar: calendar)
+        return Marks.level(r.id, period: periodStart(r.plan))
     }
     var lockInActive: Bool { Policy.lockInActive(state.lockInUntil, now: now) }
+    /// When a daily limit's or time-out's current period began, and when it resets next.
+    func periodStart(_ p: RulePlan) -> Date { Period.start(containing: now, resetAt: p.resetAt, calendar: calendar) }
+    func nextReset(_ p: RulePlan) -> Date { Period.end(after: now, resetAt: p.resetAt, calendar: calendar) }
     var activeSession: FocusSession? { state.session.flatMap { $0.endsAt > now ? $0 : nil } }
     var schedules: [Rule] { state.rules.filter { $0.plan.kind == .schedule } }
     var limits: [Rule] { state.rules.filter { $0.plan.kind == .limit } }
@@ -191,7 +196,8 @@ final class AppModel: ObservableObject {
         // fresh tokens re-register every limit, which restarts iOS's count: carry today's proven use over first
         for r in state.rules where r.plan.kind == .limit && status(r) == .counting {
             let used = LimitMath.usedAtLeast(level: usageLevel(r), limit: r.plan.limitMinutes)
-            Credits.set(r.id, minutes: max(Credits.today(r.id, now: now), used), now: now)
+            let period = periodStart(r.plan)
+            Credits.set(r.id, minutes: max(Credits.today(r.id, period: period), used), period: period)
         }
         commit { st in
             for i in st.rules.indices {
@@ -370,9 +376,9 @@ final class AppModel: ObservableObject {
             // A new threshold or new apps restart the limit's count in iOS. Carry over what today's marks prove was
             // already used, so a stricter limit never hands out extra time (and locks at once if it's already used up).
             let restarts = plan.kind.countsUse && existing.plan.kind == plan.kind &&
-                (plan.limitMinutes != existing.plan.limitMinutes || selection != existing.selection)
+                (plan.limitMinutes != existing.plan.limitMinutes || selection != existing.selection || plan.resetAt != existing.plan.resetAt)
             if restarts, !demo, case .stricterOnly(let from) = access(existing),
-               plan.kind == .timeout || Restarts.happenedToday(id, now: now) {
+               plan.kind == .timeout || Restarts.happenedToday(id, period: periodStart(existing.plan), now: now) {
                 // A restart hands out time already used: a time-out can't carry its count over (iOS reports only the
                 // break threshold), and a second limit restart today would undo the first one's carry-over. Both wait
                 // for midnight.
@@ -391,13 +397,14 @@ final class AppModel: ObservableObject {
             if restarts && !demo && plan.kind == .limit {
                 var used = 0
                 if existing.plan.isOn && status(existing) == .counting {
-                    used = max(Credits.today(id, now: now),
+                    used = max(Credits.today(id, period: periodStart(existing.plan)),
                                LimitMath.usedAtLeast(level: usageLevel(existing), limit: existing.plan.limitMinutes))
                 }
+                // carried into the new version's period (its reset time may have changed)
                 Marks.clear(id)
-                Credits.set(id, minutes: plan.isOn ? used : 0, now: now)
+                Credits.set(id, minutes: plan.isOn ? used : 0, period: periodStart(plan))
                 let level = LimitMath.level(forUsed: used, limit: plan.limitMinutes)
-                if plan.isOn && level > 0 { Marks.raise(id, to: level, now: now) }
+                if plan.isOn && level > 0 { Marks.raise(id, to: level, now: now, period: periodStart(plan)) }
             }
             commit { st in
                 guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }

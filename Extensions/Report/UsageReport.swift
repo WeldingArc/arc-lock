@@ -1,7 +1,6 @@
 // Shows how much of a block's time is used today, to the minute, inside Arc Lock's Home screen. iOS hands Screen
 // Time minutes only to this extension and keeps them here: Arc Lock itself never sees the numbers, it only shows
 // this view. (Daily limits still lock on iOS's own count; this is what the user reads.)
-import CoreText
 import DeviceActivity
 import ExtensionKit
 import Foundation
@@ -9,12 +8,6 @@ import SwiftUI
 
 @main
 struct UsageReportExtension: DeviceActivityReportExtension {
-    init() {
-        if let url = Bundle.main.url(forResource: "Pretendard-Regular", withExtension: "otf") {
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-        }
-    }
-
     // One scene per store slot (Names.slotCount): the app asks for "slot.N" for the block that holds slot N.
     var body: some DeviceActivityReportScene {
         UsageScene(slot: 0)
@@ -55,9 +48,10 @@ struct UsageScene: DeviceActivityReportScene {
         let state = StateStore.load()
         let rule = state.rules.first { state.slot(of: $0.id) == slot }
         let limit = rule.flatMap { $0.plan.kind == .limit ? $0 : nil }
-        // A daily limit counts from midnight, or from when it was created or changed today (plus the time carried
-        // over by that change) — the same count that locks it.
-        let since = limit.map { Monitoring.countingSince($0.id, now: now, calendar: calendar) } ?? midnight
+        // The block's own day starts at its reset time (midnight by default). A daily limit counts from then, or from
+        // when it was created or changed (plus the time carried over by that change): the same count that locks it.
+        let periodStart = rule.map { Period.start(containing: now, resetAt: $0.plan.resetAt, calendar: calendar) } ?? midnight
+        let since = limit.map { Monitoring.countingSince($0.id, resetAt: $0.plan.resetAt, now: now, calendar: calendar) } ?? periodStart
         var seconds: TimeInterval = 0
         for await day in data {
             for await hour in day.activitySegments {
@@ -72,8 +66,8 @@ struct UsageScene: DeviceActivityReportScene {
             }
         }
         var minutes = Int(seconds / 60)
-        if let limit { minutes += Credits.today(limit.id, now: now, calendar: calendar) }
-        return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: since > midnight ? since : nil)
+        if let limit { minutes += Credits.today(limit.id, period: periodStart) }
+        return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: since > periodStart ? since : nil)
     }
 
     /// Everything the filter let through: the block's apps, the apps in its categories, and its websites.
