@@ -5,6 +5,7 @@ import SwiftUI
 /// Strict lock shows Stop (and can be swiped to stop).
 struct BlocksTab: View {
     @EnvironmentObject private var model: AppModel
+    let openBlockNow: () -> Void
     @State private var editing: EditorTarget?
     @State private var stopping: StopTarget?
 
@@ -24,6 +25,7 @@ struct BlocksTab: View {
                 }
             }
             .themedList()
+            .blockNowButton(openBlockNow)
             .navigationTitle("Blocks")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

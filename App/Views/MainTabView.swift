@@ -2,8 +2,8 @@ import SwiftUI
 
 enum AppTab: Hashable { case home, blocks, settings }
 
-/// The app once it's set up: Home, Blocks and Settings in the bottom tab bar (Liquid Glass on iOS 26 and later),
-/// with Block now in a glass bar just above the tabs, one tap away from anywhere.
+/// The app once it's set up: Home, Blocks and Settings in the standard bottom tab bar (compact Liquid Glass on iOS 26
+/// and later), with a small glass Block now button floating above it on Home and Blocks.
 struct MainTabView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showBlockNow = false
@@ -15,13 +15,12 @@ struct MainTabView: View {
                 HomeTab(openBlockNow: openBlockNow)
             }
             Tab("Blocks", systemImage: "square.stack", value: AppTab.blocks) {
-                BlocksTab()
+                BlocksTab(openBlockNow: openBlockNow)
             }
             Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
                 SettingsTab()
             }
         }
-        .modifier(BlockNowAccessory(open: openBlockNow))
         .sheet(isPresented: $showBlockNow) { BlockNowSheet().environmentObject(model) }
         .sheet(isPresented: $showSession) { SessionSheet().environmentObject(model) }
         #if DEBUG
@@ -40,48 +39,53 @@ struct MainTabView: View {
     }
 }
 
-/// iOS 26 and later: Block now sits in a Liquid Glass bar above the tabs. Earlier iOS has no such bar, so Home shows
-/// a Block now button instead (HomeTab).
-private struct BlockNowAccessory: ViewModifier {
-    let open: () -> Void
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .tabViewBottomAccessory { BlockNowBar(open: open) }
-                .tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
-        }
-    }
-}
-
-@available(iOS 26.0, *)
-private struct BlockNowBar: View {
+/// Block now, one tap away: a small Liquid Glass button floating above the tab bar's trailing end (a frosted
+/// capsule before iOS 26). While a Block now runs it shows the time left.
+struct BlockNowButton: View {
     @EnvironmentObject private var model: AppModel
     let open: () -> Void
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: model.activeSession == nil ? "lock" : "lock.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Palette.brass)
                 if let s = model.activeSession {
-                    Text("Block now").font(.p(16, .semibold, .headline))
-                    Text("\(durationText(s.endsAt.timeIntervalSince(model.now))) left")
-                        .font(.p(15, .regular, .subheadline)).foregroundStyle(.secondary)
+                    Text(durationText(s.endsAt.timeIntervalSince(model.now))).monospacedDigit()
                 } else {
-                    Text("Block now").font(.p(16, .semibold, .headline))
+                    Text("Block now")
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
             }
+            .font(.p(16, .semibold, .headline))
+            .foregroundStyle(Palette.brass)
             .padding(.horizontal, 18)
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .frame(height: 48)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .modifier(GlassCapsule())
         .accessibilityLabel(Text(model.activeSession == nil ? "Block now" : "Block now is running"))
+    }
+}
+
+private struct GlassCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            content.background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+        }
+    }
+}
+
+extension View {
+    /// Block now floating above the tab bar at the trailing edge, with room under the list so it never hides a row.
+    func blockNowButton(_ open: @escaping () -> Void) -> some View {
+        overlay(alignment: .bottomTrailing) {
+            BlockNowButton(open: open).padding(.trailing, 20).padding(.bottom, 14)
+        }
+        .contentMargins(.bottom, 72, for: .scrollContent)
     }
 }
 

@@ -37,15 +37,6 @@ struct HomeTab: View {
                     }
                     .listRowBackground(Palette.card)
                 }
-                if #unavailable(iOS 26.0) {
-                    // iOS 26 and later show Block now in the glass bar above the tabs
-                    Section {
-                        Button(action: openBlockNow) {
-                            Label(model.activeSession == nil ? "Block now" : "Block now is running", systemImage: "lock")
-                        }
-                    }
-                    .listRowBackground(Palette.card)
-                }
                 Section {
                     Button { showLockIn = true } label: {
                         HStack(spacing: 12) {
@@ -82,6 +73,7 @@ struct HomeTab: View {
                 }
             }
             .themedList()
+            .blockNowButton(openBlockNow)
             .navigationTitle("Arc Lock")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
