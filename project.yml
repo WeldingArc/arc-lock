@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "11"
     DEVELOPMENT_TEAM: 446W55N7PB
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
@@ -36,7 +36,7 @@ targets:
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
         buildPhase: resources
-      - path: App/Resources/en.lproj
+      - path: App/Resources/InfoPlist.xcstrings
         buildPhase: resources
       - path: LICENSE
         buildPhase: resources
@@ -71,8 +71,6 @@ targets:
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
         buildPhase: resources
-      - path: App/Resources/en.lproj
-        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: ArcLockMonitor
@@ -94,8 +92,6 @@ targets:
       - path: Extensions/PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
-        buildPhase: resources
-      - path: App/Resources/en.lproj
         buildPhase: resources
     settings:
       base:
@@ -119,8 +115,6 @@ targets:
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
         buildPhase: resources
-      - path: App/Resources/en.lproj
-        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: ArcLockShieldAction
@@ -142,8 +136,6 @@ targets:
       - path: Extensions/PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: App/Resources/Localizable.xcstrings
-        buildPhase: resources
-      - path: App/Resources/en.lproj
         buildPhase: resources
     settings:
       base:

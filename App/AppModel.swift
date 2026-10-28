@@ -6,6 +6,7 @@ import DeviceActivity
 import FamilyControls
 import Foundation
 import ManagedSettings
+import UIKit
 import UserNotifications
 
 @MainActor
@@ -53,6 +54,11 @@ final class AppModel: ObservableObject {
             }
             .store(in: &bag)
         ticker = Timer.publish(every: 15, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }
+        // a place block started or ended (iOS reported arriving or leaving)
+        NotificationCenter.default.publisher(for: .placesChanged)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refresh() }
+            .store(in: &bag)
         if #available(iOS 26.5, *) {
             NotificationCenter.default.publisher(for: ManagedSettingsStore.TokenExpiryMessage.name)
                 .receive(on: RunLoop.main)
@@ -106,10 +112,14 @@ final class AppModel: ObservableObject {
 
     func status(_ r: Rule) -> RuleStatus {
         #if DEBUG
-        if demo { return Status.of(r.plan, now: now, reachedAt: reachedAt(r.id), breakUntil: Demo.breakUntil(r.id), calendar: calendar) }
+        if demo {
+            return Status.of(r.plan, now: now, reachedAt: reachedAt(r.id), breakUntil: Demo.breakUntil(r.id), visit: Demo.visit(r.id),
+                             calendar: calendar)
+        }
         #endif
         return Status.of(r.plan, now: now, reachedAt: reachedAt(r.id), breakUntil: Breaks.until(r.id),
-                         stoppedUntil: Stops.until(r.id), calendar: calendar)
+                         stoppedUntil: Stops.until(r.id), visit: r.plan.kind == .place ? PlaceVisits.get(r.id) : nil,
+                         calendar: calendar)
     }
     private func reachedAt(_ id: UUID) -> Date? {
         #if DEBUG
@@ -129,6 +139,11 @@ final class AppModel: ObservableObject {
     func strictHold(_ r: Rule) -> Date? {
         guard !state.strictLock, r.plan.strict, let until = state.strictUntil[r.id.uuidString], until > now else { return nil }
         return until
+    }
+    /// "5:00 PM", or "you leave" for a running place block that ends when you leave.
+    func holdText(_ r: Rule, _ until: Date) -> String {
+        if r.plan.kind == .place, r.plan.untilLeave, case .atPlace = status(r) { return String(localized: "you leave") }
+        return Fmt.moment(until, now: now)
     }
     /// The blocks still keeping Strict lock after it was turned off, soonest first.
     var heldRules: [Rule] {
@@ -150,30 +165,44 @@ final class AppModel: ObservableObject {
     var schedules: [Rule] { state.rules.filter { $0.plan.kind == .schedule } }
     var limits: [Rule] { state.rules.filter { $0.plan.kind == .limit } }
     var timeouts: [Rule] { state.rules.filter { $0.plan.kind == .timeout } }
+    var places: [Rule] { state.rules.filter { $0.plan.kind == .place } }
+    /// Whether you're at a place block's place right now (as iOS last reported).
+    func isAtPlace(_ r: Rule) -> Bool {
+        #if DEBUG
+        if demo { return Demo.visit(r.id)?.inside ?? false }
+        #endif
+        return PlaceVisits.get(r.id)?.inside ?? false
+    }
     /// Every block keeps a monitor and a store slot; iOS allows an app 20 monitors, so Arc Lock keeps up to 18 blocks.
     var canAddRule: Bool { canAdd(.limit) }
     func canAdd(_ kind: RuleKind) -> Bool { Capacity.fits(state.rules.map(\.plan) + [RulePlan(kind: kind)]) }
 
-    /// Blocks holding something right now, soonest end first.
-    var blockingNow: [(name: String, until: Date, kind: RuleKind?)] {
-        var out = state.rules.compactMap { r -> (String, Date, RuleKind?)? in
-            status(r).blockingUntil.map { (r.plan.name, $0, r.plan.kind) }
+    /// Blocks holding something right now, soonest end first. A place block running until you leave has no end:
+    /// its `until` is `.distantFuture` (shown as "until you leave").
+    var blockingNow: [(name: String, until: Date, kind: RuleKind?, rule: Rule?)] {
+        var out = state.rules.compactMap { r -> (String, Date, RuleKind?, Rule?)? in
+            let s = status(r)
+            if case .atPlace = s { return (r.plan.displayName, .distantFuture, r.plan.kind, r) }
+            return s.blockingUntil.map { (r.plan.displayName, $0, r.plan.kind, r) }
         }
-        if let s = activeSession { out.append((String(localized: "Block now"), s.endsAt, nil)) }
-        return out.sorted { $0.1 < $1.1 }.map { (name: $0.0, until: $0.1, kind: $0.2) }
+        if let s = activeSession { out.append((String(localized: "Block now"), s.endsAt, nil, nil)) }
+        return out.sorted { $0.1 < $1.1 }.map { (name: $0.0, until: $0.1, kind: $0.2, rule: $0.3) }
     }
 
-    var nextStart: (name: String, at: Date)? {
-        state.rules.compactMap { r -> (String, Date)? in
-            if case .waiting(let next?) = status(r) { return (r.plan.name, next) }
+    var nextStart: (rule: Rule, at: Date)? {
+        state.rules.compactMap { r -> (Rule, Date)? in
+            if case .waiting(let next?) = status(r) { return (r, next) }
             return nil
-        }.min { $0.1 < $1.1 }.map { (name: $0.0, at: $0.1) }
+        }.min { $0.1 < $1.1 }.map { (rule: $0.0, at: $0.1) }
     }
 
     // MARK: lifecycle
 
     func refresh() {
         if demo { return }
+        // before the first unlock after a restart the shared state can't be read and looks empty: acting on it
+        // would lift every block
+        guard UIApplication.shared.isProtectedDataAvailable else { return }
         var (s, _) = Engine.housekeep()
         if s.rules.contains(where: { s.slot(of: $0.id) == nil }) { s = StateStore.update { $0.assignSlots() } }
         state = s
@@ -182,6 +211,7 @@ final class AppModel: ObservableObject {
         report(Monitoring.sync(s))
         Monitoring.finishBreaks(s)
         Engine.reconcile(s)
+        PlaceWatcher.shared.sync(s)
         Diag.dumpMonitors()
     }
 
@@ -225,6 +255,7 @@ final class AppModel: ObservableObject {
     func didBecomeActive() {
         reportEpoch += 1
         refresh()
+        if !demo { PlaceWatcher.shared.recheck() }
     }
 
     private func tick() {
@@ -238,6 +269,7 @@ final class AppModel: ObservableObject {
         let due = state.rules.contains { r in r.pending.map { effectiveDate($0, plan: r.plan) <= now } ?? false }
         func newlyDue(_ d: Date?) -> Bool { d.map { $0 > previous && $0 <= now } ?? false }
         let switchDue = newlyDue(state.deletionProtectionOffAt) || state.strictUntil.values.contains(where: newlyDue)
+            || places.contains { newlyDue(PlaceRules.latestEnd(PlaceVisits.get($0.id), now: previous)) }
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
@@ -248,6 +280,7 @@ final class AppModel: ObservableObject {
             st.assignSlots()
         }
         reportEpoch += 1
+        PlaceWatcher.shared.sync(state)
         guard isAuthorized else { return }
         report(Monitoring.sync(state))
         Engine.reconcile(state)
@@ -322,12 +355,21 @@ final class AppModel: ObservableObject {
     /// time-out's break). It comes back on its own next time.
     func stop(_ id: UUID) -> Outcome {
         if !demo { now = Date() }
-        guard let rule = state.rules.first(where: { $0.id == id }), let until = status(rule).blockingUntil else { return .saved }
+        guard let rule = state.rules.first(where: { $0.id == id }), status(rule).isBlocking else { return .saved }
         guard access(rule) == .free else {
             if case .locked(let u, let reason) = access(rule) { return .refused(Self.lockedMessage(until: u, reason: reason, now: now)) }
             return .refused(String(localized: "This block has Strict lock. It can't be stopped while it runs."))
         }
         if demo { return .saved }
+        if rule.plan.kind == .place {
+            // over for this visit: it starts again the next time you arrive
+            PlaceVisits.set(id, PlaceRules.stop(PlaceVisits.get(id), now: now))
+            Monitoring.stopPlaceEnd(id)
+            Engine.reconcile(state, now: now)
+            objectWillChange.send()
+            return .saved
+        }
+        guard let until = status(rule).blockingUntil else { return .saved }
         Stops.set(id, until: until)
         if rule.plan.kind == .timeout {
             // the break is over now: start counting toward the next one
@@ -370,6 +412,12 @@ final class AppModel: ObservableObject {
         guard Capacity.fits(others + [plan]) else {
             return .refused(String(localized: "iOS lets one app watch only so many blocks: up to \(Capacity.maxRules), and a time-out counts as two. Delete one first."))
         }
+        if plan.kind == .place {
+            let elsewhere = state.rules.filter { $0.id != id && $0.plan.kind == .place }.reduce(0) { $0 + $1.plan.places.count }
+            guard elsewhere + plan.places.count <= Limits.maxPlaces else {
+                return .refused(String(localized: "iOS lets one app watch up to \(Limits.maxPlaces) places in all. Remove a place first."))
+            }
+        }
         guard let id, let existing = state.rules.first(where: { $0.id == id }) else {
             commit { $0.rules.append(Rule(plan: plan, selection: selection)) }
             return .saved
@@ -408,6 +456,13 @@ final class AppModel: ObservableObject {
             }
             // a block that becomes strict runs again, even if it was stopped by hand
             if !demo && state.isStrict(plan, id: id, now: now) && !state.isStrict(existing.plan, id: id, now: now) { Stops.clear(id) }
+            // a place block with another place, ending or days starts over: iOS says again where you are
+            let placeRestarts = !demo && existing.plan.kind == .place && PlaceRules.restartsVisit(from: existing.plan, to: plan)
+            if placeRestarts {
+                PlaceVisits.clear(id)
+                Monitoring.stopPlaceEnd(id)
+            }
+            defer { if placeRestarts { PlaceWatcher.shared.recheck(id) } }
             if restarts && !demo && plan.kind == .limit {
                 var used = 0
                 if existing.plan.isOn && status(existing) == .counting {
@@ -454,7 +509,8 @@ final class AppModel: ObservableObject {
             Restarts.clear(id)
             Breaks.clear(id)
             Stops.clear(id)
-            DeviceActivityCenter().stopMonitoring([Names.breakActivity(id)])
+            PlaceVisits.clear(id)
+            DeviceActivityCenter().stopMonitoring([Names.breakActivity(id), Names.placeActivity(id)])
             Monitoring.forget(id)
             return .saved
         }
@@ -526,6 +582,7 @@ final class AppModel: ObservableObject {
         let when = Fmt.moment(until, now: now)
         switch reason {
         case .running, .session: return String(localized: "This block is running. It can't be changed until \(when).")
+        case .atPlace: return String(localized: "This block runs until you leave. It can't be changed before then.")
         case .reached: return String(localized: "This limit is used up. It can't be changed until \(when).")
         case .onBreak: return String(localized: "This time-out is on a break. It can't be changed until \(when).")
         case .lockIn: return String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). Rules can't be changed until then.")

@@ -81,7 +81,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
             if !current.strictLock, let held = current.strictUntil[id.uuidString], held > now, held < back {
                 _ = StateStore.update { _ = $0.holdThroughBreak(id, until: back, now: now) }
             }
-            Notify.post(id: "break.\(id)", title: rule.plan.name,
+            Notify.post(id: "break.\(id)", title: rule.plan.displayName,
                         body: L("Time for a %@ break. Back at %@.", minutesLabel(rule.plan.breakMinutes), Fmt.time(back)))
             Engine.reconcile(StateStore.load(), now: now)
             return
@@ -93,7 +93,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
                 Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule, now: now))
             }
             let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
-            Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))
+            Notify.post(id: "reached.\(id)", title: rule.plan.displayName, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))
         }
         Engine.reconcile(state, now: now)
     }
@@ -110,10 +110,10 @@ final class ActivityMonitor: DeviceActivityMonitor {
                                            countingSince: Monitoring.countingSince(id, resetAt: rule.plan.resetAt, now: now), now: now)
         else { return }
         if rule.plan.kind == .timeout {
-            Notify.post(id: "warn.\(id)", title: rule.plan.name,
+            Notify.post(id: "warn.\(id)", title: rule.plan.displayName,
                         body: L("1 minute until a %@ break.", minutesLabel(rule.plan.breakMinutes)))
         } else {
-            Notify.post(id: "warn.\(id)", title: rule.plan.name, body: L("5 minutes left."))
+            Notify.post(id: "warn.\(id)", title: rule.plan.displayName, body: L("5 minutes left."))
         }
     }
 
@@ -123,7 +123,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
               rule.plan.kind == .schedule, rule.plan.isOn,
               let next = ScheduleMath.nextWindow(after: Date(), plan: rule.plan, calendar: .current),
               next.start.timeIntervalSinceNow < 10 * 60 else { return }
-        Notify.post(id: "soon.\(id)", title: rule.plan.name, body: L("Starts in 5 minutes, at %@.", Fmt.time(next.start)))
+        Notify.post(id: "soon.\(id)", title: rule.plan.displayName, body: L("Starts in 5 minutes, at %@.", Fmt.time(next.start)))
     }
 }
 

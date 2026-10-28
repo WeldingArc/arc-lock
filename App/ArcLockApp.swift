@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ArcLockApp: App {
+    @UIApplicationDelegateAdaptor(LaunchDelegate.self) private var launch
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var phase
 
@@ -13,6 +14,19 @@ struct ArcLockApp: App {
                     if p == .active { model.didBecomeActive(); Task { await model.checkAccess() } }
                 }
         }
+    }
+}
+
+/// iOS relaunches Arc Lock in the background when you arrive at or leave a place block's place, and hands that to the
+/// location delegate — which has to exist before launch finishes, whether or not a window ever opens.
+final class LaunchDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        #if DEBUG
+        if Demo.isOn { return true }
+        #endif
+        PlaceWatcher.shared.start()
+        return true
     }
 }
 

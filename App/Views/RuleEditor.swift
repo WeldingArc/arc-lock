@@ -1,5 +1,7 @@
+import CoreLocation
 import FamilyControls
 import SwiftUI
+import UIKit
 
 /// Create or change a schedule, a daily limit or a time-out. What may be changed follows the lock policy:
 /// a Strict-lock block is read-only while it runs (or during a lock-in), and looser changes to a counting
@@ -16,7 +18,10 @@ struct RuleEditor: View {
     @State private var domainError = false
     @State private var confirmDelete = false
     @State private var confirmStart = false
+    @State private var confirmPlaceStart = false
+    @State private var editingPlace: PlaceTarget?
     @State private var loaded = false
+    @ObservedObject private var places = PlaceWatcher.shared
 
     private var existing: Rule? {
         if case .edit(let id) = target { return model.state.rules.first { $0.id == id } }
@@ -42,6 +47,9 @@ struct RuleEditor: View {
                     case .schedule: whenSection
                     case .limit: limitSection
                     case .timeout: timeoutSection
+                    case .place:
+                        locationSection
+                        placeSection
                     }
                     strictSection
                     if existing != nil && !readOnly { deleteSection }
@@ -50,7 +58,7 @@ struct RuleEditor: View {
             }
             .themedList()
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(existing == nil ? newTitle : plan.name)
+            .navigationTitle(existing == nil ? newTitle : plan.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -69,6 +77,17 @@ struct RuleEditor: View {
             } message: {
                 Text("Its hours include the current time, so it starts now and can't be changed until \(Fmt.moment(startsNowUntil ?? Date(), now: model.now)).")
             }
+            .confirmationDialog(Text("You're there now"), isPresented: $confirmPlaceStart, titleVisibility: .visible) {
+                Button("Save and start") { commitSave() }
+            } message: {
+                Text(plan.untilLeave ? "This block starts as soon as you save it and lasts until you leave."
+                                     : "This block starts as soon as you save it and lasts \(minutesText(plan.placeMinutes)).")
+            }
+            .sheet(item: $editingPlace) { target in
+                PlacePicker(initial: target.index.flatMap { plan.places.indices.contains($0) ? plan.places[$0] : nil }) { spot in
+                    if let i = target.index, plan.places.indices.contains(i) { plan.places[i] = spot } else { plan.places.append(spot) }
+                }
+            }
             .confirmationDialog(Text("Delete this block?"), isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) { delete() }
             } message: {
@@ -79,6 +98,11 @@ struct RuleEditor: View {
         }
         .presentationBackground(Palette.night)
         .onAppear(perform: load)
+        #if DEBUG
+        .task {
+            if Demo.shot == "placepicker" { try? await Task.sleep(for: .milliseconds(600)); editingPlace = PlaceTarget(index: nil) }
+        }
+        #endif
     }
 
     private func load() {
@@ -93,7 +117,9 @@ struct RuleEditor: View {
         } else if case .new(let kind) = target {
             plan = RulePlan(name: "", kind: kind, start: TimeOfDay(9, 0), end: TimeOfDay(17, 0),
                             days: kind == .schedule ? [2, 3, 4, 5, 6] : Set(1...7), limitMinutes: kind == .timeout ? 20 : 30)
+            if kind == .place { places.locate() }
         }
+        if plan.kind == .place && existing != nil { places.locate() }      // for the "you're there now" check
     }
 
     private var newTitle: String {
@@ -101,6 +127,7 @@ struct RuleEditor: View {
         case .schedule: String(localized: "New schedule")
         case .limit: String(localized: "New daily limit")
         case .timeout: String(localized: "New time-out")
+        case .place: String(localized: "New place block")
         }
     }
 
@@ -148,10 +175,12 @@ struct RuleEditor: View {
                 if k != .schedule && plan.days == [2, 3, 4, 5, 6] { plan.days = Set(1...7) }
                 if k == .timeout && was != .timeout { plan.limitMinutes = 20 }
                 if k == .limit && was == .timeout { plan.limitMinutes = 30 }
+                if k == .place { places.locate() }
             })) {
                 Text("Schedule").tag(RuleKind.schedule)
-                Text("Daily limit").tag(RuleKind.limit)
+                Text("Limit").tag(RuleKind.limit)
                 Text("Time-out").tag(RuleKind.timeout)
+                Text("Place").tag(RuleKind.place)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -161,12 +190,34 @@ struct RuleEditor: View {
     }
 
     private var nameSection: some View {
-        Section("Name") {
+        Section {
             TextField("Name", text: $plan.name,
-                      prompt: Text(plan.kind == .schedule ? "Study, Sleep, Work…" : (plan.kind == .timeout ? "Shorts, Reels, Games…" : "Social, Games, Video…")))
+                      prompt: Text(namePrompt))
                 .submitLabel(.done)
+        } header: {
+            Text("Name")
+        } footer: {
+            if !plan.hasName {
+                if selection.isEmpty && plan.domains.isEmpty && !(plan.kind == .place && !plan.places.isEmpty) {
+                    Text("Optional. Without a name, the block is called by the first app you choose.")
+                } else {
+                    HStack(spacing: 4) {
+                        Text("Optional. Without a name it's called")
+                        BlockName(plan: plan, selection: selection).fontWeight(.semibold)
+                    }
+                }
+            }
         }
         .listRowBackground(Palette.card)
+    }
+
+    private var namePrompt: LocalizedStringKey {
+        switch plan.kind {
+        case .schedule: "Study, Sleep, Work…"
+        case .limit: "Social, Games, Video…"
+        case .timeout: "Shorts, Reels, Games…"
+        case .place: "Library, School, Gym…"
+        }
     }
 
     private var appsSection: some View {
@@ -263,7 +314,134 @@ struct RuleEditor: View {
         case .schedule: String(localized: "Blocked in Safari and every other browser. While a site is blocked, private browsing is off.")
         case .limit: String(localized: "Blocked in every browser once the time is used up. To count time on a site, also pick it above.")
         case .timeout: String(localized: "Blocked in every browser during each break. To count time on a site, also pick it above.")
+        case .place: String(localized: "Blocked in Safari and every other browser while the block runs. While a site is blocked, private browsing is off.")
         }
+    }
+
+    // MARK: places
+
+    /// Location access, asked for only here: when a place block is set up. iOS asks twice (while using, then always);
+    /// both answers are made in its own prompts.
+    @ViewBuilder private var locationSection: some View {
+        if (!isDemo || demoShot == "placenew") && places.access != .always {
+            Section {
+                switch places.access {
+                case .notAsked:
+                    Text("A place block needs your location. Arc Lock watches only the places you choose, to start a block when you arrive and end it when you leave. Arc Lock never sends your location anywhere.")
+                    Text("To work while Arc Lock is closed, place blocks need location access set to “Always”. iOS asks in two steps.")
+                        .foregroundStyle(Palette.ink)
+                    Button("Continue") { places.requestAccess() }.fontWeight(.semibold)
+                case .whileUsing:
+                    Text("Location access is “While Using”, so a place block can only start or end while Arc Lock is open. To work while it's closed, it needs “Always”.")
+                    if places.askedAlways {
+                        Text("You can change it in Settings › Arc Lock › Location.").foregroundStyle(Palette.ink)
+                        Button("Open Settings") { openSettings() }.fontWeight(.semibold)
+                    } else {
+                        Button("Continue") { places.requestAccess() }.fontWeight(.semibold)
+                    }
+                case .approximate:
+                    Text("Precise Location is off for Arc Lock, so iOS can't tell when you arrive or leave. You can change it in Settings › Arc Lock › Location.")
+                    Button("Open Settings") { openSettings() }.fontWeight(.semibold)
+                case .denied:
+                    Text("Location access is off for Arc Lock, so a place block can't start or end. You can change it in Settings › Arc Lock › Location.")
+                    Button("Open Settings") { openSettings() }.fontWeight(.semibold)
+                case .always:
+                    EmptyView()
+                }
+            } header: {
+                Text("Location access")
+            }
+            .listRowBackground(Palette.cardHi)
+        }
+    }
+
+    private var placeSection: some View {
+        Section {
+            if !plan.places.isEmpty {
+                PlacesPreview(spots: plan.places)
+                    .frame(height: 150)
+                    .listRowInsets(EdgeInsets())
+            }
+            ForEach(Array(plan.places.enumerated()), id: \.offset) { i, spot in
+                Button { editingPlace = PlaceTarget(index: i) } label: {
+                    LabeledContent {
+                        Text(distanceText(spot.radius)).foregroundStyle(Palette.muted)
+                    } label: {
+                        Label { Text(spot.name).foregroundStyle(Palette.ink).lineLimit(1) } icon: {
+                            Image(systemName: "mappin.circle.fill").foregroundStyle(Palette.brass)
+                        }
+                    }
+                }
+                .swipeActions {
+                    if !readOnly {
+                        Button(role: .destructive) { plan.places.remove(at: i) } label: { Label("Remove", systemImage: "trash") }
+                    }
+                }
+            }
+            if !readOnly && plan.places.count < Limits.maxPlaces {
+                Button(plan.places.isEmpty ? "Choose a place" : "Add another place") { editingPlace = PlaceTarget(index: nil) }
+            }
+            Picker("Ends", selection: $plan.untilLeave) {
+                Text("When I leave").tag(true)
+                Text("After a set time").tag(false)
+            }
+            if !plan.untilLeave {
+                Stepper {
+                    LabeledContent("Lasts") { Text(minutesText(plan.placeMinutes)).foregroundStyle(Palette.ink).monospacedDigit() }
+                } onIncrement: {
+                    step(&plan.placeMinutes, by: 15, in: Limits.placeMinutes)
+                } onDecrement: {
+                    step(&plan.placeMinutes, by: -15, in: Limits.placeMinutes)
+                }
+            }
+            DayChips(days: $plan.days).padding(.vertical, 4)
+        } header: {
+            Text(plan.places.count > 1 ? "Places" : "Place")
+        } footer: {
+            Text(placeNote)
+        }
+        .listRowBackground(Palette.card)
+    }
+
+    private var placeNote: String {
+        let several = plan.places.count > 1
+        if plan.untilLeave {
+            return several
+                ? String(localized: "Starts when you arrive at any of these places on a selected day, and ends when you've left them all (after 12 hours at the latest). iOS notices arriving and leaving within a few minutes.")
+                : String(localized: "Starts when you arrive on a selected day and ends when you leave (after 12 hours at the latest). iOS notices arriving and leaving within a few minutes.")
+        }
+        return several
+            ? String(localized: "Starts when you arrive at any of these places on a selected day, and ends \(minutesText(plan.placeMinutes)) later, even if you leave sooner. iOS notices arriving within a few minutes.")
+            : String(localized: "Starts when you arrive on a selected day and ends \(minutesText(plan.placeMinutes)) later, even if you leave sooner. iOS notices arriving within a few minutes.")
+    }
+
+    /// Saving would start it right away: you're at one of its places now (on a selected day) and it isn't running yet.
+    private var startsAtPlaceNow: Bool {
+        guard plan.kind == .place, plan.isOn, let here = places.location, here.timestamp.timeIntervalSinceNow > -300,
+              plan.days.contains(Calendar.current.component(.weekday, from: Date())) else { return false }
+        // saving starts a visit only for a new block, or when its places, days or ending change
+        if let r = existing, !PlaceRules.restartsVisit(from: r.plan, to: plan) { return false }
+        let slack = min(max(here.horizontalAccuracy, 0), 100)
+        return plan.places.contains { here.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) <= $0.radius + slack }
+    }
+
+    private var isDemo: Bool {
+        #if DEBUG
+        return Demo.isOn
+        #else
+        return false
+        #endif
+    }
+    private var demoShot: String? {
+        #if DEBUG
+        return Demo.shot
+        #else
+        return nil
+        #endif
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
 
     private func addDomain() {
@@ -368,7 +546,7 @@ struct RuleEditor: View {
                 Text(plan.strict ? "While it runs, it can't be stopped, loosened or deleted." : "You can stop it or change it any time.")
                 if plan.strict && !model.state.strictLock {
                     if let rule = existing, let until = model.strictHold(rule) {
-                        Text("Strict lock is off in Settings. This block was active when you turned it off, so it stays strict until \(Fmt.moment(until, now: model.now)).")
+                        Text("Strict lock is off in Settings. This block was active when you turned it off, so it stays strict until \(model.holdText(rule, until)).")
                             .foregroundStyle(Palette.rose)
                     } else {
                         Text("Strict lock is off in Settings, so for now this block can be stopped.")
@@ -403,7 +581,7 @@ struct RuleEditor: View {
     }
 
     private func save() {
-        if startsNowUntil != nil { confirmStart = true } else { commitSave() }
+        if startsNowUntil != nil { confirmStart = true } else if startsAtPlaceNow { confirmPlaceStart = true } else { commitSave() }
     }
 
     private func commitSave() {
@@ -424,4 +602,10 @@ struct RuleEditor: View {
         case .refused(let why): model.problem = why
         }
     }
+}
+
+/// Which place the map picker edits: one of the block's places, or a new one.
+struct PlaceTarget: Identifiable {
+    let index: Int?
+    var id: Int { index ?? -1 }
 }

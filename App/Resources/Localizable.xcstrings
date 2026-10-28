@@ -1,6 +1,172 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ + %lld more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ + %2$lld more"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 외 %2$lld개 더"
+          }
+        }
+      }
+    },
+    "%@ a day · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ a day · %2$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "하루 %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ break after %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ break after %2$@ · %3$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@ 사용 후 %1$@ 휴식 · %3$@"
+          }
+        }
+      }
+    },
+    "%@ each selected day.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일마다 %@ 동안 차단됩니다."
+          }
+        }
+      }
+    },
+    "%@ icon": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 아이콘"
+          }
+        }
+      }
+    },
+    "%@ is stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 차단이 중지되었습니다."
+          }
+        }
+      }
+    },
+    "%@ left": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 남음"
+          }
+        }
+      }
+    },
+    "%@ since %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ since %2$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@부터 %1$@"
+          }
+        }
+      }
+    },
+    "%@ since %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ since %2$@ · %3$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@부터 %1$@ · %3$@"
+          }
+        }
+      }
+    },
+    "%@ used today": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 %@ 사용"
+          }
+        }
+      }
+    },
+    "%@ used today · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ used today · %2$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 %1$@ 사용 · %2$@"
+          }
+        }
+      }
+    },
+    "%@, overnight — it ends the next morning.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@부터 밤새 이어져 다음 날 아침에 끝납니다."
+          }
+        }
+      }
+    },
+    "%lld": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld"
+          }
+        }
+      }
+    },
     "%lld apps": {
       "localizations": {
         "en": {
@@ -19,6 +185,12 @@
                 }
               }
             }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 %lld개"
           }
         }
       }
@@ -42,27 +214,11 @@
               }
             }
           }
-        }
-      }
-    },
-    "%lld websites": {
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld website"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld websites"
-                }
-              }
-            }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카테고리 %lld개"
           }
         }
       }
@@ -85,6 +241,3020 @@
                 }
               }
             }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld일"
+          }
+        }
+      }
+    },
+    "%lld websites": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld website"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld websites"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트 %lld개"
+          }
+        }
+      }
+    },
+    "%lldd": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld일"
+          }
+        }
+      }
+    },
+    "+%lld": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld"
+          }
+        }
+      }
+    },
+    "1 minute until a %@ break.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 휴식까지 1분 남았습니다."
+          }
+        }
+      }
+    },
+    "5 minutes left.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5분 남았습니다."
+          }
+        }
+      }
+    },
+    "A Block now session is already running until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단이 %@까지 실행 중입니다."
+          }
+        }
+      }
+    },
+    "A block can last at most 22 hours, so there's always time to change it between windows.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단은 최대 22시간까지 설정할 수 있습니다. 차단 사이에 설정을 바꿀 시간을 남겨 두기 위해서입니다."
+          }
+        }
+      }
+    },
+    "A block must last at least 15 minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 시간은 15분 이상이어야 합니다."
+          }
+        }
+      }
+    },
+    "A lock-in can be made longer, never shorter.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙 고정 기간은 늘릴 수 있지만 줄일 수는 없습니다."
+          }
+        }
+      }
+    },
+    "A place block needs your location. Arc Lock watches only the places you choose, to start a block when you arrive and end it when you leave. Arc Lock never sends your location anywhere.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 차단을 사용하려면 위치 접근이 필요합니다. Arc Lock은 선택한 장소만 확인해 도착하면 차단을 시작하고, 떠나면 끝냅니다. Arc Lock은 위치 정보를 어디에도 전송하지 않습니다."
+          }
+        }
+      }
+    },
+    "A quiet notice before a block starts, a daily limit runs out, or a break begins.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 시작 전, 일일 한도가 끝나기 전, 휴식이 시작되기 전에 미리 알려 줍니다."
+          }
+        }
+      }
+    },
+    "A strict block can't be stopped while it runs, and Arc Lock can't be deleted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금이 켜진 차단은 실행 중에 중지할 수 없으며 Arc Lock도 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정보"
+          }
+        }
+      }
+    },
+    "Add": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가"
+          }
+        }
+      }
+    },
+    "Add a block": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 추가"
+          }
+        }
+      }
+    },
+    "Add another place": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 추가"
+          }
+        }
+      }
+    },
+    "After %@ of use, these apps lock for %@. Then they open again and the count starts over. It all starts fresh at %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "After %1$@ of use, these apps lock for %2$@. Then they open again and the count starts over. It all starts fresh at %3$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 사용하면 이 앱들이 %2$@ 동안 잠깁니다. 이후 다시 사용할 수 있고 사용 시간도 새로 계산됩니다. %3$@에 새 주기가 시작됩니다."
+          }
+        }
+      }
+    },
+    "After a set time": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정해진 시간 후"
+          }
+        }
+      }
+    },
+    "After a stretch of use, a short break. Then they open again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한동안 사용하면 잠시 휴식한 뒤 다시 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "After a stretch of use, apps take a short break, then open again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한동안 사용하면 앱이 잠시 잠겼다가 다시 열립니다."
+          }
+        }
+      }
+    },
+    "After the time you allow each day, apps lock until the limit resets.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "하루 사용 한도를 다 쓰면 한도가 초기화될 때까지 앱이 잠깁니다."
+          }
+        }
+      }
+    },
+    "After the time you allow, they lock until the limit resets.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "허용된 시간을 다 쓰면 한도가 초기화될 때까지 앱이 잠깁니다."
+          }
+        }
+      }
+    },
+    "After this much use": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이만큼 사용 후"
+          }
+        }
+      }
+    },
+    "All used. Locked until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한도를 모두 사용했습니다. %@까지 잠깁니다."
+          }
+        }
+      }
+    },
+    "App icon": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 아이콘"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모양"
+          }
+        }
+      }
+    },
+    "Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 기록은 Apple이 이 iPhone에 보관합니다. Arc Lock은 사용 중인 앱이나 방문한 웹사이트를 알 수 없으며, 어떤 정보도 외부로 보내지 않습니다."
+          }
+        }
+      }
+    },
+    "Apps & websites": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 및 웹사이트"
+          }
+        }
+      }
+    },
+    "Arc Lock": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock"
+          }
+        }
+      }
+    },
+    "Arc Lock %@ · Open source, no account, no ads.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock %@ · 오픈 소스 · 계정과 광고 없음"
+          }
+        }
+      }
+    },
+    "Arc Lock blocks apps through Apple's Screen Time. Without access, none of your blocks can run.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock은 Apple의 스크린 타임을 통해 앱을 차단합니다. 접근 권한이 없으면 차단을 실행할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Arc Lock blocks apps through Apple's Screen Time. iOS will ask for your Face ID or passcode.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock은 Apple의 스크린 타임을 통해 앱을 차단합니다. iOS에서 Face ID 또는 암호를 요청합니다."
+          }
+        }
+      }
+    },
+    "Ask a friend to hold a passcode": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "친구에게 암호 맡기기"
+          }
+        }
+      }
+    },
+    "Back at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 다시 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Before a block starts, a daily limit runs out, or a time-out's break begins.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 시작 전, 일일 한도가 끝나기 전, 휴식이 시작되기 전에 알려 줍니다."
+          }
+        }
+      }
+    },
+    "Block": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단"
+          }
+        }
+      }
+    },
+    "Block for %@?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 동안 차단하시겠습니까?"
+          }
+        }
+      }
+    },
+    "Block now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단"
+          }
+        }
+      }
+    },
+    "Block now is running": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단 실행 중"
+          }
+        }
+      }
+    },
+    "Block now is stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단을 중지했습니다."
+          }
+        }
+      }
+    },
+    "Block now isn't running.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단이 실행되고 있지 않습니다."
+          }
+        }
+      }
+    },
+    "Blocked in Safari and every other browser while Block now runs.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단이 실행되는 동안 Safari를 포함한 모든 브라우저에서 차단됩니다."
+          }
+        }
+      }
+    },
+    "Blocked in Safari and every other browser while the block runs. While a site is blocked, private browsing is off.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단이 실행되는 동안 Safari를 포함한 모든 브라우저에서 차단됩니다. 웹사이트가 차단된 동안에는 비공개 브라우징을 사용할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Blocked in Safari and every other browser. While a site is blocked, private browsing is off.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari를 포함한 모든 브라우저에서 차단됩니다. 웹사이트가 차단된 동안에는 비공개 브라우징을 사용할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Blocked in every browser during each break. To count time on a site, also pick it above.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식 시간에는 모든 브라우저에서 차단됩니다. 웹사이트 사용 시간도 집계하려면 위에서 해당 사이트를 선택하세요."
+          }
+        }
+      }
+    },
+    "Blocked in every browser once the time is used up. To count time on a site, also pick it above.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 시간을 다 쓰면 모든 브라우저에서 차단됩니다. 웹사이트 사용 시간도 집계하려면 위에서 해당 사이트를 선택하세요."
+          }
+        }
+      }
+    },
+    "Blocked until %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 차단됩니다."
+          }
+        }
+      }
+    },
+    "Blocked until you leave.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 떠날 때까지 차단됩니다."
+          }
+        }
+      }
+    },
+    "Blocking now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단 중"
+          }
+        }
+      }
+    },
+    "Blocks": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단"
+          }
+        }
+      }
+    },
+    "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off works right away; a block that's running or counting stays strict until its own reset, or until it ends.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금이 켜진 차단은 실행 중에 중지하거나 완화하거나 삭제할 수 없습니다. 설정에서 강제 잠금을 꺼도 이미 실행 중이거나 사용 시간을 계산 중인 차단은 해당 차단이 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금이 켜진 차단은 실행 중에 변경하거나 중지할 수 없습니다. 삭제 방지를 켜면 앱을 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Blocks you can't break.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "중간에 해제할 수 없는 차단"
+          }
+        }
+      }
+    },
+    "Break until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 휴식"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취소"
+          }
+        }
+      }
+    },
+    "Change": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경"
+          }
+        }
+      }
+    },
+    "Changes are waiting until %@. Until then the current version runs.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경 사항은 %@부터 적용됩니다. 그전까지는 현재 설정이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Choose a place": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 선택"
+          }
+        }
+      }
+    },
+    "Choose apps & websites": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 및 웹사이트 선택"
+          }
+        }
+      }
+    },
+    "Choose at most %lld apps and %lld websites — or pick whole categories instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Choose at most %1$lld apps and %2$lld websites — or pick whole categories instead."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱은 최대 %1$lld개, 웹사이트는 최대 %2$lld개까지 선택할 수 있습니다. 또는 카테고리 전체를 선택하세요."
+          }
+        }
+      }
+    },
+    "Choose at most %lld apps — or pick a whole category instead.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱은 최대 %lld개까지 선택할 수 있습니다. 또는 카테고리 전체를 선택하세요."
+          }
+        }
+      }
+    },
+    "Choose at most %lld websites.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트는 최대 %lld개까지 선택할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Choose the apps, categories and websites to block.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단할 앱, 카테고리, 웹사이트를 선택하세요."
+          }
+        }
+      }
+    },
+    "Choose what to block and a time from 15 minutes to 12 hours.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단할 항목을 선택하고 15분에서 12시간 사이의 시간을 설정하세요."
+          }
+        }
+      }
+    },
+    "Choose what to block right now.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단할 항목을 선택하세요."
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
+          }
+        }
+      }
+    },
+    "Confirmation": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속"
+          }
+        }
+      }
+    },
+    "Counting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계산 중"
+          }
+        }
+      }
+    },
+    "Daily limit": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일일 한도"
+          }
+        }
+      }
+    },
+    "Daily limits": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일일 한도"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제"
+          }
+        }
+      }
+    },
+    "Delete block": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 삭제"
+          }
+        }
+      }
+    },
+    "Delete this block?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단을 삭제할까요?"
+          }
+        }
+      }
+    },
+    "Deletion protection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제 방지"
+          }
+        }
+      }
+    },
+    "Deletion protection turns off at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제 방지가 %@에 해제됩니다."
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "완료"
+          }
+        }
+      }
+    },
+    "Done for now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일단 종료"
+          }
+        }
+      }
+    },
+    "Each day": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매일"
+          }
+        }
+      }
+    },
+    "End break": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식 끝내기"
+          }
+        }
+      }
+    },
+    "End the break for %@?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 휴식을 끝낼까요?"
+          }
+        }
+      }
+    },
+    "End this break?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식을 끝낼까요?"
+          }
+        }
+      }
+    },
+    "Ends": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료"
+          }
+        }
+      }
+    },
+    "Every day": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매일"
+          }
+        }
+      }
+    },
+    "Extra protection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가 보호"
+          }
+        }
+      }
+    },
+    "Extra protection with a friend": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "친구와 함께하는 추가 보호"
+          }
+        }
+      }
+    },
+    "For %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 동안"
+          }
+        }
+      }
+    },
+    "For the days you choose, every rule stays exactly as it is or gets stricter, and no app can be deleted. There is no early exit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 기간에는 규칙을 그대로 두거나 더 제한적으로만 바꿀 수 있습니다. 앱도 삭제할 수 없으며, 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Forest": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포레스트"
+          }
+        }
+      }
+    },
+    "Free, no account, no ads. Everything stays on this iPhone.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정과 광고 없이 사용할 수 있습니다. 모든 데이터는 이 iPhone에만 저장됩니다."
+          }
+        }
+      }
+    },
+    "Freeze every rule for days. No early exit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "며칠 동안 모든 규칙을 고정합니다. 중간에 해제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "From": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작"
+          }
+        }
+      }
+    },
+    "Get a heads-up": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미리 알림 켜기"
+          }
+        }
+      }
+    },
+    "Graphite": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "그래파이트"
+          }
+        }
+      }
+    },
+    "Heads-up notifications": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미리 알림"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈"
+          }
+        }
+      }
+    },
+    "How Arc Lock works": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock 작동 방식"
+          }
+        }
+      }
+    },
+    "How it works": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작동 방식"
+          }
+        }
+      }
+    },
+    "In a real emergency your friend can always give you the code. That's the point: a pause long enough for the urge to pass.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정말 급한 상황이라면 친구가 언제든 암호를 알려 줄 수 있습니다. 잠시 멈춰 하고 싶은 마음이 가라앉을 시간을 갖는 것이 목적입니다."
+          }
+        }
+      }
+    },
+    "It keeps working until %@ and is deleted then.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 작동한 뒤 삭제됩니다."
+          }
+        }
+      }
+    },
+    "It starts again on its own next time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음번에는 자동으로 다시 시작됩니다."
+          }
+        }
+      }
+    },
+    "It stays off until %@ and starts again on its own next time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 꺼져 있다가 다음번에 자동으로 다시 시작됩니다."
+          }
+        }
+      }
+    },
+    "It unlocks at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 잠금이 풀립니다."
+          }
+        }
+      }
+    },
+    "Its hours include the current time, so it starts now and can't be changed until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 시간이 포함되어 있어 지금 시작하며, %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Keep it on": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "켜 두기"
+          }
+        }
+      }
+    },
+    "Keep the current version": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 버전 유지"
+          }
+        }
+      }
+    },
+    "Kind": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종류"
+          }
+        }
+      }
+    },
+    "LOCK": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠금"
+          }
+        }
+      }
+    },
+    "Lasts": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지속 시간"
+          }
+        }
+      }
+    },
+    "Length": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "길이"
+          }
+        }
+      }
+    },
+    "Library, School, Gym…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도서관, 학교, 헬스장…"
+          }
+        }
+      }
+    },
+    "Limit": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한도"
+          }
+        }
+      }
+    },
+    "Location access": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "위치 접근"
+          }
+        }
+      }
+    },
+    "Location access is off for Arc Lock, so a place block can't start or end. You can change it in Settings › Arc Lock › Location.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock의 위치 접근이 꺼져 있어 장소 차단을 시작하거나 끝낼 수 없습니다. 설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Location access is off for Arc Lock, so place blocks can't start or end. You can change it in Settings › Arc Lock › Location.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock의 위치 접근이 꺼져 있어 장소 차단을 시작하거나 끝낼 수 없습니다. 설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Location access is “While Using”, so a place block can only start or end while Arc Lock is open. To work while it's closed, it needs “Always”.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "위치 접근이 ‘앱을 사용하는 동안’으로 설정되어 있어 Arc Lock이 열려 있을 때만 장소 차단이 시작되거나 끝납니다. 앱을 닫은 뒤에도 작동하게 하려면 ‘항상’을 선택하세요."
+          }
+        }
+      }
+    },
+    "Location access is “While Using”, so place blocks can't start or end while Arc Lock is closed. You can change it in Settings › Arc Lock › Location.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "위치 접근이 ‘앱을 사용하는 동안’으로 설정되어 있어 Arc Lock을 닫으면 장소 차단을 시작하거나 끝낼 수 없습니다. 설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Location access isn't set up yet. Open a place block and tap Continue.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "위치 접근이 아직 설정되지 않았습니다. 장소 차단을 열고 계속을 탭하세요."
+          }
+        }
+      }
+    },
+    "Lock in": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙 고정"
+          }
+        }
+      }
+    },
+    "Lock in through %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 규칙 고정"
+          }
+        }
+      }
+    },
+    "Lock-in needs Strict lock. Turn Strict lock on in Settings first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙을 고정하려면 먼저 설정에서 강제 잠금을 켜세요."
+          }
+        }
+      }
+    },
+    "Lock-in needs Strict lock. Turn it on in Settings first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙을 고정하려면 먼저 설정에서 강제 잠금을 켜세요."
+          }
+        }
+      }
+    },
+    "Locked": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠김"
+          }
+        }
+      }
+    },
+    "Locked by Arc Lock": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock에서 잠김"
+          }
+        }
+      }
+    },
+    "Locked in through %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 규칙 고정"
+          }
+        }
+      }
+    },
+    "Locked until %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 잠김"
+          }
+        }
+      }
+    },
+    "Locked until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 잠깁니다."
+          }
+        }
+      }
+    },
+    "Locked while you're here": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기에 있는 동안 잠김"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이름"
+          }
+        }
+      }
+    },
+    "Name (Library, School…)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이름 (도서관, 학교 등)"
+          }
+        }
+      }
+    },
+    "Navy": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네이비"
+          }
+        }
+      }
+    },
+    "New daily limit": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 일일 한도"
+          }
+        }
+      }
+    },
+    "New place block": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 장소 차단"
+          }
+        }
+      }
+    },
+    "New schedule": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 일정"
+          }
+        }
+      }
+    },
+    "New time-out": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 타임아웃"
+          }
+        }
+      }
+    },
+    "Next unlock in %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠금 해제까지 %@"
+          }
+        }
+      }
+    },
+    "No app can be deleted from this iPhone, Arc Lock included.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 포함해 이 iPhone의 앱을 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "No app can be deleted from this iPhone, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 포함해 이 iPhone의 앱을 삭제할 수 없습니다. 삭제 방지를 꺼도 강제 잠금이 켜진 차단이 실행 중이거나 사용 시간을 계산하는 동안에는 앱을 삭제할 수 없습니다. 해당 차단이 초기화되거나 끝나야 삭제 방지가 해제됩니다."
+          }
+        }
+      }
+    },
+    "No days": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요일 없음"
+          }
+        }
+      }
+    },
+    "No place yet": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 없음"
+          }
+        }
+      }
+    },
+    "No places found. Try another name, or tap the map.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 찾지 못했습니다. 다른 이름으로 검색하거나 지도에서 선택하세요."
+          }
+        }
+      }
+    },
+    "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙을 완화하거나 삭제할 수 없고 앱도 삭제할 수 없습니다. 차단은 추가할 수 있습니다."
+          }
+        }
+      }
+    },
+    "None.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "없음."
+          }
+        }
+      }
+    },
+    "Not today": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘은 실행 안 함"
+          }
+        }
+      }
+    },
+    "Not used yet today": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 아직 사용하지 않음"
+          }
+        }
+      }
+    },
+    "Nothing chosen yet.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 선택한 항목이 없습니다."
+          }
+        }
+      }
+    },
+    "Nothing is blocked yet.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 차단된 것이 없습니다."
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "꺼짐"
+          }
+        }
+      }
+    },
+    "Off: blocks can be stopped or changed any time. A block that was running or counting when you turned it off stays strict until its own reset, or until it ends. Lock-in needs it on.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "꺼짐: 차단을 언제든 중지하거나 변경할 수 있습니다. 다만 강제 잠금을 끌 때 실행 중이거나 사용 시간을 계산 중인 차단은 각각 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다. 규칙 고정을 사용하려면 강제 잠금을 켜야 합니다."
+          }
+        }
+      }
+    },
+    "Once it starts, it can't be stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작한 뒤에는 중지할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 열기"
+          }
+        }
+      }
+    },
+    "Open Settings › Screen Time": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 › 스크린 타임 열기"
+          }
+        }
+      }
+    },
+    "Optional. Without a name it's called": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택 사항입니다. 이름을 입력하지 않으면 다음 이름으로 표시됩니다"
+          }
+        }
+      }
+    },
+    "Optional. Without a name, the block is called by the first app you choose.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택 사항입니다. 이름을 입력하지 않으면 처음 선택한 앱 이름으로 표시됩니다."
+          }
+        }
+      }
+    },
+    "Paper": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페이퍼"
+          }
+        }
+      }
+    },
+    "Pick a place: apps lock when you arrive, and open again when you leave or after a set time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 선택하세요. 도착하면 앱이 잠기고, 떠나거나 설정한 시간이 지나면 다시 열립니다."
+          }
+        }
+      }
+    },
+    "Pick apps and websites and the hours they stay locked.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단할 앱과 웹사이트, 잠글 시간을 선택하세요."
+          }
+        }
+      }
+    },
+    "Pick someone you trust. They'll type a 4-digit code you don't see.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "믿을 수 있는 사람을 선택하세요. 그 사람이 4자리 암호를 입력하며, 암호는 내게 표시되지 않습니다."
+          }
+        }
+      }
+    },
+    "Pinned place": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고정한 장소"
+          }
+        }
+      }
+    },
+    "Place": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소"
+          }
+        }
+      }
+    },
+    "Place block": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 차단"
+          }
+        }
+      }
+    },
+    "Places": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소"
+          }
+        }
+      }
+    },
+    "Plum": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플럼"
+          }
+        }
+      }
+    },
+    "Precise Location is off for Arc Lock, so iOS can't tell when you arrive or leave. You can change it in Settings › Arc Lock › Location.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock의 정확한 위치가 꺼져 있어 iOS가 도착하거나 떠난 시점을 확인할 수 없습니다. 설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Privacy: Arc Lock collects nothing": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "개인정보 보호: 아무것도 수집하지 않음"
+          }
+        }
+      }
+    },
+    "Put iOS's own Screen Time settings behind a passcode that only a friend knows.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "친구만 아는 암호로 iOS의 스크린 타임 설정을 잠그세요."
+          }
+        }
+      }
+    },
+    "Recovery goes to your friend": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복구용 계정은 친구가 관리합니다"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제거"
+          }
+        }
+      }
+    },
+    "Report a problem": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "문제 신고"
+          }
+        }
+      }
+    },
+    "Resets at": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초기화 시각"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장"
+          }
+        }
+      }
+    },
+    "Save and lock until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장 후 %@까지 잠그기"
+          }
+        }
+      }
+    },
+    "Save and start": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장하고 시작"
+          }
+        }
+      }
+    },
+    "Saved. It takes effect at %@. Until then the current version runs.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장했습니다. %@부터 적용됩니다. 그전까지는 현재 설정이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Schedule": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일정"
+          }
+        }
+      }
+    },
+    "Schedules": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일정"
+          }
+        }
+      }
+    },
+    "Screen Time access": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스크린 타임 접근"
+          }
+        }
+      }
+    },
+    "Screen Time access is off": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스크린 타임 접근 꺼짐"
+          }
+        }
+      }
+    },
+    "Screen Time access is off. Turn it on again to keep blocking.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스크린 타임 접근이 꺼져 있습니다. 차단을 계속하려면 다시 켜세요."
+          }
+        }
+      }
+    },
+    "Screen Time access wasn't granted. Arc Lock can't block anything without it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스크린 타임 접근이 허용되지 않았습니다. 이 권한이 없으면 Arc Lock에서 차단을 설정할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Search for a place": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소 검색"
+          }
+        }
+      }
+    },
+    "Search, or tap the map where the block should start.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색하거나 지도에서 차단을 시작할 장소를 선택하세요."
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정"
+          }
+        }
+      }
+    },
+    "Shorts, Reels, Games…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "쇼츠, 릴스, 게임…"
+          }
+        }
+      }
+    },
+    "Size": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "크기"
+          }
+        }
+      }
+    },
+    "Social, Games, Video…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SNS, 게임, 동영상…"
+          }
+        }
+      }
+    },
+    "Source code (MIT)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "소스 코드 (MIT)"
+          }
+        }
+      }
+    },
+    "Start": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작"
+          }
+        }
+      }
+    },
+    "Start — can't be stopped": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작 · 중지할 수 없음"
+          }
+        }
+      }
+    },
+    "Starts %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 시작"
+          }
+        }
+      }
+    },
+    "Starts in 5 minutes, at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5분 뒤 %@에 시작됩니다."
+          }
+        }
+      }
+    },
+    "Starts when you arrive at any of these places on a selected day, and ends %@ later, even if you leave sooner. iOS notices arriving within a few minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일에 지정한 장소 중 한 곳에 도착하면 시작되고 %@ 후에 끝납니다. 그 전에 떠나도 차단은 계속됩니다. iOS가 도착을 감지하기까지 몇 분 정도 걸릴 수 있습니다."
+          }
+        }
+      }
+    },
+    "Starts when you arrive at any of these places on a selected day, and ends when you've left them all (after 12 hours at the latest). iOS notices arriving and leaving within a few minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일에 지정한 장소 중 한 곳에 도착하면 시작되고, 모든 장소를 떠나면 끝납니다(늦어도 12시간 후). iOS가 도착과 출발을 감지하기까지 몇 분 정도 걸릴 수 있습니다."
+          }
+        }
+      }
+    },
+    "Starts when you arrive on a selected day and ends %@ later, even if you leave sooner. iOS notices arriving within a few minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일에 도착하면 시작되고 %@ 후에 끝납니다. 그 전에 떠나도 차단은 계속됩니다. iOS가 도착을 감지하기까지 몇 분 정도 걸릴 수 있습니다."
+          }
+        }
+      }
+    },
+    "Starts when you arrive on a selected day and ends when you leave (after 12 hours at the latest). iOS notices arriving and leaving within a few minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일에 도착하면 시작되고, 떠나면 끝납니다(늦어도 12시간 후). iOS가 도착과 출발을 감지하기까지 몇 분 정도 걸릴 수 있습니다."
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "중지"
+          }
+        }
+      }
+    },
+    "Stop %@?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 차단을 중지할까요?"
+          }
+        }
+      }
+    },
+    "Stop Block now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단 중지"
+          }
+        }
+      }
+    },
+    "Stop Block now?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단을 중지할까요?"
+          }
+        }
+      }
+    },
+    "Stop this block?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단을 중지할까요?"
+          }
+        }
+      }
+    },
+    "Stop until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 중지"
+          }
+        }
+      }
+    },
+    "Stop until it resets": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한도가 초기화될 때까지 중지"
+          }
+        }
+      }
+    },
+    "Stopped until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 중지"
+          }
+        }
+      }
+    },
+    "Strict lock": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금"
+          }
+        }
+      }
+    },
+    "Strict lock is off for this Block now, so it can be stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 지금 차단은 강제 잠금이 꺼져 있어 중지할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Strict lock is off in Settings, so for now it can be stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정에서 강제 잠금을 꺼 두어 지금은 중지할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Strict lock is off in Settings, so for now this block can be stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정에서 강제 잠금을 꺼 두어 지금은 이 차단을 중지할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Strict lock is off in Settings. This block was active when you turned it off, so it stays strict until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정에서 강제 잠금이 꺼져 있습니다. 강제 잠금을 끌 때 이 차단이 실행 중이었으므로 %@까지 강제 잠금이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Strict lock is off. Blocks running now stay strict until they reset or end.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금이 꺼져 있습니다. 현재 실행 중인 차단은 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Strict lock is off: blocks can be stopped. One that was running or counting when you turned it off stays strict until its own reset, or until it ends.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금이 꺼져 있어 차단을 중지할 수 있습니다. 강제 잠금을 끌 때 이미 실행 중이거나 사용 시간을 계산 중이던 차단은 각각 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다."
+          }
+        }
+      }
+    },
+    "Strict until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 강제 잠금"
+          }
+        }
+      }
+    },
+    "Study, Sleep, Work…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "공부, 수면, 업무…"
+          }
+        }
+      }
+    },
+    "Take a break of": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식 시간"
+          }
+        }
+      }
+    },
+    "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the phone.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "‘스크린 타임 설정 잠그기’(또는 ‘스크린 타임 암호 사용’)를 탭한 다음 친구에게 iPhone을 건네세요."
+          }
+        }
+      }
+    },
+    "That block is longer than iOS allows.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 허용하는 시간보다 차단 시간이 깁니다."
+          }
+        }
+      }
+    },
+    "That doesn't look like a website address.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트 주소 형식이 아닌 것 같습니다."
+          }
+        }
+      }
+    },
+    "The apps open now and the count starts over.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱이 다시 열리고 사용 시간이 처음부터 다시 계산됩니다."
+          }
+        }
+      }
+    },
+    "The apps open now.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱이 다시 열립니다."
+          }
+        }
+      }
+    },
+    "The apps open now. It starts again the next time you arrive.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱이 다시 열립니다. 다음에 도착하면 차단이 다시 시작됩니다."
+          }
+        }
+      }
+    },
+    "The apps open until %@. Then the limit starts again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 앱을 사용할 수 있습니다. 이후 한도가 다시 시작됩니다."
+          }
+        }
+      }
+    },
+    "The block is stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단이 중지되었습니다."
+          }
+        }
+      }
+    },
+    "The break for %@ is over.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 휴식이 끝났습니다."
+          }
+        }
+      }
+    },
+    "The break is over.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식이 끝났습니다."
+          }
+        }
+      }
+    },
+    "Theme": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "테마"
+          }
+        }
+      }
+    },
+    "This Block now has Strict lock, so it can't be stopped. It ends on its own.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 지금 차단에는 강제 잠금이 적용되어 중지할 수 없습니다. 설정한 시간이 되면 자동으로 끝납니다."
+          }
+        }
+      }
+    },
+    "This Block now has Strict lock. It can't be stopped early.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 지금 차단에는 강제 잠금이 적용되어 일찍 중지할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This block ends on its own.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 자동으로 끝납니다."
+          }
+        }
+      }
+    },
+    "This block ends on its own. If it should be over, open Arc Lock to refresh.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 자동으로 끝납니다. 이미 끝났어야 한다면 Arc Lock을 열어 상태를 새로 고치세요."
+          }
+        }
+      }
+    },
+    "This block ends when you leave.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 떠나면 이 차단이 끝납니다."
+          }
+        }
+      }
+    },
+    "This block has Strict lock. It can't be stopped while it runs.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단에는 강제 잠금이 적용되어 실행 중에 중지할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This block is running. It can't be changed until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단이 실행 중입니다. %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This block runs until you leave. It can't be changed before then.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 장소를 떠날 때까지 실행됩니다. 그전에는 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This block starts as soon as you save it and lasts %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장하는 즉시 시작해 %@ 동안 실행됩니다."
+          }
+        }
+      }
+    },
+    "This block starts as soon as you save it and lasts until you leave.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장하는 즉시 시작해 장소를 떠날 때까지 실행됩니다."
+          }
+        }
+      }
+    },
+    "This block starts right away": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 바로 시작됩니다"
+          }
+        }
+      }
+    },
+    "This block will be deleted at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 %@에 삭제됩니다."
+          }
+        }
+      }
+    },
+    "This limit is locked in until it resets. One stricter change applies now; anything else — more time, fewer apps or days, the reset time, deleting, or a second change — starts at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도는 초기화될 때까지 고정됩니다. 한 번은 더 제한적으로 바로 바꿀 수 있습니다. 그 밖의 변경(시간 늘리기, 앱이나 요일 줄이기, 초기화 시각 변경, 삭제, 두 번째 변경)은 %@부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "This limit is used up": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도를 모두 사용했습니다"
+          }
+        }
+      }
+    },
+    "This limit is used up. It can't be changed until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도를 모두 사용했습니다. %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This limit is used up. It unlocks at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도를 모두 사용했습니다. %@에 잠금이 해제됩니다."
+          }
+        }
+      }
+    },
+    "This time-out is locked in until it resets. A longer break or more days apply now; any other change — the minutes of use, the apps, a shorter break, the reset time, deleting — starts at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 타임아웃은 초기화될 때까지 고정됩니다. 휴식 시간을 늘리거나 요일을 추가하는 변경은 바로 적용됩니다. 그 밖의 변경(사용 시간, 앱, 휴식 시간 단축, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "This time-out is on a break. It can't be changed until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 타임아웃은 휴식 중입니다. %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Through %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지"
+          }
+        }
+      }
+    },
+    "Time for a %@ break. Back at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 휴식 시간입니다. %@에 다시 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Time for a break": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴식 시간입니다"
+          }
+        }
+      }
+    },
+    "Time in these apps and websites adds up toward each break.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 앱과 웹사이트에서 사용한 시간을 합산해 휴식 주기에 반영합니다."
+          }
+        }
+      }
+    },
+    "Time in these apps and websites adds up toward one daily limit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 앱과 웹사이트에서 사용한 시간을 합산해 하루 사용 한도에 반영합니다."
+          }
+        }
+      }
+    },
+    "Time left": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "남은 시간"
+          }
+        }
+      }
+    },
+    "Time-out": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임아웃"
+          }
+        }
+      }
+    },
+    "Time-outs": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "타임아웃"
+          }
+        }
+      }
+    },
+    "To": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료"
+          }
+        }
+      }
+    },
+    "To work while Arc Lock is closed, place blocks need location access set to “Always”. iOS asks in two steps.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock이 닫혀 있어도 장소 차단이 작동하려면 위치 접근을 ‘항상’으로 설정해야 합니다. iOS가 두 단계로 요청합니다."
+          }
+        }
+      }
+    },
+    "Together your schedules would leave less than an hour a day free. Keep a free hour, so you can always open Arc Lock and change them.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일정을 모두 설정하면 하루에 자유 시간이 1시간도 남지 않습니다. 언제든 Arc Lock을 열어 일정을 바꿀 수 있도록 하루에 1시간은 비워 두세요."
+          }
+        }
+      }
+    },
+    "Too many blocks for iOS to watch. Delete one.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 설정할 수 있는 차단 수를 초과했습니다. 차단 하나를 삭제하세요."
+          }
+        }
+      }
+    },
+    "Turns off at %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 꺼짐"
+          }
+        }
+      }
+    },
+    "Type %@ to confirm": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인하려면 %@ 입력"
+          }
+        }
+      }
+    },
+    "Unlocked": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠금 해제됨"
+          }
+        }
+      }
+    },
+    "Unlocks when you leave": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 떠나면 잠금 해제"
+          }
+        }
+      }
+    },
+    "Until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지"
+          }
+        }
+      }
+    },
+    "Until you leave": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "떠날 때까지"
+          }
+        }
+      }
+    },
+    "Up next": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 차단"
+          }
+        }
+      }
+    },
+    "Use my location": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 위치 사용"
+          }
+        }
+      }
+    },
+    "Used up": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모두 사용"
+          }
+        }
+      }
+    },
+    "Website": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트"
+          }
+        }
+      }
+    },
+    "Website time counts in Safari and in browsers that share it with Screen Time (turn that on in the browser's settings).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트 사용 시간은 Safari와 스크린 타임에 사용 시간을 공유하도록 설정한 브라우저에서 계산됩니다. 이 설정은 브라우저에서 켤 수 있습니다."
+          }
+        }
+      }
+    },
+    "Websites": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트"
+          }
+        }
+      }
+    },
+    "Websites by address": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주소로 웹사이트 차단"
+          }
+        }
+      }
+    },
+    "Websites picked here are blocked in Safari. To block a site in every browser, also add it by address below.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기서 선택한 웹사이트는 Safari에서 차단됩니다. 모든 브라우저에서 차단하려면 아래에 사이트 주소도 추가하세요."
+          }
+        }
+      }
+    },
+    "Weekdays": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주중"
+          }
+        }
+      }
+    },
+    "Weekends": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주말"
+          }
+        }
+      }
+    },
+    "When": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시간"
+          }
+        }
+      }
+    },
+    "When I leave": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "떠날 때"
+          }
+        }
+      }
+    },
+    "When iOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPhone.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 암호 복구용 Apple 계정을 요청하면 친구가 자신의 계정을 입력해야 합니다. 이 단계를 건너뛰지 마세요. 암호를 복구할 수 없으면 iPhone을 초기화해야 할 수도 있습니다."
+          }
+        }
+      }
+    },
+    "When the time is used up, these apps lock until %@. A new limit starts counting when you save it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 시간을 다 쓰면 이 앱들이 %@까지 잠깁니다. 새 한도는 저장하는 순간부터 시간을 계산합니다."
+          }
+        }
+      }
+    },
+    "When you arrive": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도착하면"
+          }
+        }
+      }
+    },
+    "While it runs, it can't be stopped, loosened or deleted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 중에는 중지하거나 완화하거나 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Will be deleted at %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 삭제 예정"
+          }
+        }
+      }
+    },
+    "You can change it in Settings › Arc Lock › Location.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "You can stop it any time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "언제든 멈출 수 있습니다."
+          }
+        }
+      }
+    },
+    "You can stop it or change it any time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "언제든 멈추거나 바꿀 수 있습니다."
+          }
+        }
+      }
+    },
+    "You're locked in through %@. Rules can't be changed until then.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 규칙이 고정됩니다. 그때까지 규칙을 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "You're there now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 이 장소에 있습니다"
+          }
+        }
+      }
+    },
+    "Your changes start at %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경 사항은 %@부터 적용됩니다"
+          }
+        }
+      }
+    },
+    "for %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 동안"
+          }
+        }
+      }
+    },
+    "iOS lets one app watch only so many blocks: up to %lld, and a time-out counts as two. Delete one first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 한 앱에 설정할 수 있는 차단은 최대 %lld개입니다. 타임아웃 하나는 2개로 계산됩니다. 차단 하나를 먼저 삭제하세요."
+          }
+        }
+      }
+    },
+    "iOS lets one app watch up to %lld places in all. Remove a place first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 한 앱에 추가할 수 있는 장소는 모두 합쳐 최대 %lld곳입니다. 장소 하나를 먼저 삭제하세요."
+          }
+        }
+      }
+    },
+    "iOS notices arriving and leaving within a few minutes. A bigger circle works more reliably.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS가 도착과 출발을 감지하기까지 몇 분 정도 걸릴 수 있습니다. 범위를 넓게 설정할수록 더 안정적으로 작동합니다."
+          }
+        }
+      }
+    },
+    "iOS shows a short message when the icon changes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아이콘을 변경하면 iOS에서 짧은 알림이 표시됩니다."
+          }
+        }
+      }
+    },
+    "midnight": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자정"
+          }
+        }
+      }
+    },
+    "none left": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "남은 시간 없음"
+          }
+        }
+      }
+    },
+    "resets %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 초기화"
+          }
+        }
+      }
+    },
+    "until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지"
+          }
+        }
+      }
+    },
+    "until you leave": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "떠날 때까지"
+          }
+        }
+      }
+    },
+    "you leave": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "장소를 떠날 때"
+          }
+        }
+      }
+    },
+    "youtube.com": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "youtube.com"
           }
         }
       }

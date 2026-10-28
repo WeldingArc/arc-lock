@@ -1,0 +1,74 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock"
+          }
+        }
+      }
+    },
+    "CFBundleName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock"
+          }
+        }
+      }
+    },
+    "NSLocationAlwaysAndWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "So a place block can start when you arrive and end when you leave while Arc Lock is closed, it needs to know when you cross the edge of a place you chose. Arc Lock never sends your location anywhere."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock이 닫혀 있을 때도 장소 차단이 작동하려면 선택한 장소에 도착하거나 떠나는 시점을 알아야 합니다. Arc Lock은 위치 정보를 어디에도 전송하지 않습니다."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock uses your location only for place blocks you set up: to start a block when you arrive at a place you chose, and to end it when you leave. Arc Lock never sends your location anywhere."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock은 사용자가 설정한 장소 차단에만 위치를 사용합니다. 고른 장소에 도착하면 차단을 시작하고, 떠나면 끝냅니다. Arc Lock은 위치 정보를 어디에도 전송하지 않습니다."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

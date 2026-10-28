@@ -94,6 +94,13 @@ enum Monitoring {
                         registration: Registration(kind: .limit, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
                                                    thresholds: thresholds, creditDay: credit > 0 ? period : nil,
                                                    selection: rule.selection))
+        case .place:
+            // never registered (sync skips place blocks: iOS reports places to the app, not to a monitor)
+            return Plan(schedule: DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
+                                                         intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true),
+                        events: [:],
+                        registration: Registration(kind: .place, start: .midnight, end: TimeOfDay(23, 59), limit: 0, thresholds: [:],
+                                                   creditDay: nil, selection: rule.selection))
         case .timeout:
             // one threshold: the use allowed before a break, counted from registration (re-registered after each break)
             let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
@@ -140,14 +147,27 @@ enum Monitoring {
         let center = DeviceActivityCenter()
         var errors: [Error] = []
         var wanted: [DeviceActivityName: (Rule, Plan)] = [:]
-        for rule in state.rules where rule.plan.isOn { wanted[Names.activity(rule.id)] = (rule, plan(for: rule, now: now)) }
+        for rule in state.rules where rule.plan.isOn && rule.plan.kind != .place {
+            wanted[Names.activity(rule.id)] = (rule, plan(for: rule, now: now))
+        }
 
         let have = Set(center.activities)
         // a running break keeps its own monitor (its end lifts the break); anything else not wanted goes
         let liveBreaks = Set(state.rules.filter { $0.plan.isOn && $0.plan.kind == .timeout && (Breaks.until($0.id) ?? .distantPast) > now }
             .map { Names.breakActivity($0.id) })
+        // a running place block keeps its one-off end monitor (and gets one if it's missing)
+        let runningPlaces = state.rules.filter {
+            $0.plan.isOn && $0.plan.kind == .place && PlaceRules.isRunning(PlaceVisits.get($0.id), now: now)
+        }
+        let livePlaces = Set(runningPlaces.map { Names.placeActivity($0.id) })
+        for rule in runningPlaces where !have.contains(Names.placeActivity(rule.id)) {
+            let visit = PlaceVisits.get(rule.id)
+            if let started = visit?.started, let latest = PlaceRules.latestEnd(visit, now: now) {
+                startPlaceEnd(rule.id, from: started, to: latest)
+            }
+        }
         let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
-            && !Diag.probeNames.contains($0) }
+            && !livePlaces.contains($0) && !Diag.probeNames.contains($0) }
         if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
 
         for (name, (rule, p)) in wanted {
@@ -236,6 +256,28 @@ enum Monitoring {
         return true
     }
 
+    /// One-off monitor whose end lifts a running place block at its latest end — its set time, or the 12-hour safety
+    /// end of one that ends when you leave — even if Arc Lock stays closed (like a Block-now session). Leaving itself
+    /// needs none: iOS wakes the app for that.
+    static func startPlaceEnd(_ id: UUID, from start: Date, to end: Date, calendar: Calendar = .current) {
+        let comps: Set<Calendar.Component> = [.hour, .minute, .second]
+        // iOS wants at least 15 minutes; a block set to a time lasts that long, so starting a minute early is enough
+        let begin = min(start.addingTimeInterval(-60), end.addingTimeInterval(-16 * 60))
+        let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(comps, from: begin),
+                                              intervalEnd: calendar.dateComponents(comps, from: end), repeats: false)
+        let center = DeviceActivityCenter()
+        center.stopMonitoring([Names.placeActivity(id)])
+        do {
+            try center.startMonitoring(Names.placeActivity(id), during: schedule)
+        } catch {
+            Diag.log("place monitor FAILED: \(error)")
+        }
+    }
+
+    static func stopPlaceEnd(_ id: UUID) {
+        DeviceActivityCenter().stopMonitoring([Names.placeActivity(id)])
+    }
+
     /// One-off monitor whose end lifts a Block-now session even if the app is never opened again. The start is a
     /// minute in the past and only clock components are used: a start of exactly "now" can slip to tomorrow.
     static func startSession(_ s: FocusSession, calendar: Calendar = .current) throws {
@@ -283,10 +325,11 @@ enum Engine {
         Shielding.guardDeletion(state.onboarded && state.deletionProtection)
     }
 
-    /// A rule's status at `now`, from what the monitor recorded (use, breaks, stops).
+    /// A rule's status at `now`, from what was recorded (use, breaks, stops, a place block's visit).
     static func status(_ rule: Rule, now: Date, calendar: Calendar = .current) -> RuleStatus {
         Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), breakUntil: Breaks.until(rule.id),
-                  stoppedUntil: Stops.until(rule.id), calendar: calendar)
+                  stoppedUntil: Stops.until(rule.id), visit: rule.plan.kind == .place ? PlaceVisits.get(rule.id) : nil,
+                  calendar: calendar)
     }
 
     /// Whether a rule should shield at `now` (see `edge`).
@@ -294,6 +337,7 @@ enum Engine {
         let status = Engine.status(rule, now: now, calendar: calendar)
         // A break can be as short as a minute, so no edge here: `finishBreaks` ends it (allowing for an early callback).
         if case .onBreak(let until) = status { return until > now }
+        if case .atPlace(let latest) = status { return latest.timeIntervalSince(now) > edge }   // until you leave, or the safety end
         if let until = status.blockingUntil { return until.timeIntervalSince(now) > edge }
         if case .waiting(let next?) = status, next.timeIntervalSince(now) <= edge { return true }
         return false
@@ -327,6 +371,10 @@ enum Engine {
             if s.strictUntil.contains(where: { $0.value.timeIntervalSince(now) <= edge }) {
                 s.strictUntil = s.strictUntil.filter { $0.value.timeIntervalSince(now) > edge }
             }
+            // a place block's hold lasts as long as its visit's block: gone once that's over (left, or its time is up)
+            let idlePlaces = Set(s.rules.filter { $0.plan.kind == .place && !PlaceRules.isRunning(PlaceVisits.get($0.id), now: now) }
+                .map(\.id.uuidString))
+            if s.strictUntil.keys.contains(where: idlePlaces.contains) { s.strictUntil = s.strictUntil.filter { !idlePlaces.contains($0.key) } }
             if let sess = s.session, sess.endsAt <= now { s.session = nil }
             return (Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil), moved)
         }
@@ -347,6 +395,8 @@ enum Engine {
                 Restarts.clear(id)
                 Breaks.clear(id)
                 Stops.clear(id)
+                PlaceVisits.clear(id)
+                Monitoring.stopPlaceEnd(id)
                 Monitoring.forget(id)
             }
             fresh.assignSlots()

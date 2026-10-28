@@ -122,6 +122,9 @@ struct ArcState: Codable, Equatable {
         for r in rules where r.plan.strict && isStrict(r, now: now) {
             guard var until = StrictHold.until(r.plan, status: status(r), now: now, calendar: calendar) else { continue }
             if !strictLock, let held = strictUntil[r.id.uuidString] { until = min(until, held) }
+            // a place block running until you leave: its end isn't known (its own shield keeps apps from being
+            // deleted while it runs), so it doesn't hold this switch for up to 12 hours
+            if r.plan.kind == .place && r.plan.untilLeave { continue }
             ends.append(until)
         }
         if let s = session, s.endsAt > now, isStrict(s, now: now) { ends.append(s.endsAt) }
@@ -156,6 +159,25 @@ struct ArcState: Codable, Equatable {
         strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
         strictUntil = (try? c.decode([String: Date].self, forKey: .strictUntil)) ?? [:]
     }
+}
+
+extension RulePlan {
+    /// The block's name as text: what the user typed, or else its place, its first website, or what kind of block it
+    /// is. (With no name typed, the app shows the first chosen app's name instead — iOS can draw it, see BlockName,
+    /// but never hands it to Arc Lock as text.)
+    var displayName: String {
+        let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        if kind == .place, let p = places.first?.name, !p.isEmpty { return p }
+        if let d = domains.first { return d }
+        switch kind {
+        case .schedule: return L("Schedule")
+        case .limit: return L("Daily limit")
+        case .timeout: return L("Time-out")
+        case .place: return L("Place block")
+        }
+    }
+    var hasName: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
 
 /// Decodes an element if it can, so one unreadable rule doesn't take the others with it.
@@ -279,6 +301,21 @@ enum Breaks {
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
 }
 
+/// Place blocks: the current visit to each block's place, written by the app when iOS reports arriving or leaving
+/// (and read by the extensions, which can't see the location themselves).
+enum PlaceVisits {
+    private static func key(_ id: UUID) -> String { "visit.\(id.uuidString)" }
+    static func get(_ id: UUID) -> PlaceVisit? {
+        guard let d = AppGroup.defaults.data(forKey: key(id)) else { return nil }
+        return try? JSONDecoder().decode(PlaceVisit.self, from: d)
+    }
+    static func set(_ id: UUID, _ visit: PlaceVisit?) {
+        guard let visit, let d = try? JSONEncoder().encode(visit) else { clear(id); return }
+        AppGroup.defaults.set(d, forKey: key(id))
+    }
+    static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
+}
+
 /// Blocks that aren't strict and were stopped by hand: no shield until the date (when the block would end).
 enum Stops {
     private static func key(_ id: String) -> String { "stopped.\(id)" }
@@ -304,6 +341,12 @@ enum Names {
     static func breakActivity(_ rule: UUID) -> DeviceActivityName { .init("brk.\(rule.uuidString)") }
     static func breakRuleID(_ activity: DeviceActivityName) -> UUID? {
         guard activity.rawValue.hasPrefix("brk.") else { return nil }
+        return UUID(uuidString: String(activity.rawValue.dropFirst(4)))
+    }
+    /// A place block set to end after a time: a one-off monitor whose end lifts it, even if Arc Lock stays closed.
+    static func placeActivity(_ rule: UUID) -> DeviceActivityName { .init("plc.\(rule.uuidString)") }
+    static func placeRuleID(_ activity: DeviceActivityName) -> UUID? {
+        guard activity.rawValue.hasPrefix("plc.") else { return nil }
         return UUID(uuidString: String(activity.rawValue.dropFirst(4)))
     }
     static func ruleID(_ activity: DeviceActivityName) -> UUID? {

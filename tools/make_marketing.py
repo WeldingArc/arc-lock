@@ -13,12 +13,44 @@ SHOTS = [
     # No price words anywhere in screenshots (App Review 2.3.7): the "paywall" half of the slogan lives in the
     # description and the README only.
     ("home", "Focus is a human right.", "Schedules, daily limits and time-outs\nfor apps and websites. Nothing held back."),
+    ("place", "Locks where you are.", "Pick places on the map. Apps lock when\nyou arrive and open when you leave."),
     ("timeout", "Take a breather.", "After a stretch of use, a short break.\nIt starts over at the time you pick."),
     ("limits", "Limits that stick.", "See the minutes left. Used up means\nlocked until the limit resets."),
     ("editor", "No early exit.", "With Strict lock, a running block\ncan't be stopped or deleted."),
     ("appearance", "Make it yours.", "Five themes, each with\na matching app icon."),
     ("lockin", "Lock in for days.", "Freeze every rule. No loosening,\nno deleting apps."),
 ]
+# Korean captions (filled in from the reviewed translation): name -> (title, subtitle)
+SHOTS_KO = {
+    "home": (
+        "집중은 모두의 권리",
+        "앱과 웹사이트 일정 설정\n스크린 타임을 직접 관리"
+    ),
+    "place": (
+        "도착하면 잠깁니다",
+        "지도에서 장소 선택\n도착하면 잠기고 떠나면 해제"
+    ),
+    "timeout": (
+        "잠시 쉬어 가세요",
+        "한동안 사용하면 잠시 쉬고\n정한 시각에 다시 시작"
+    ),
+    "limits": (
+        "한도는 지켜집니다",
+        "남은 시간 확인\n한도를 다 쓰면 초기화될 때까지 잠금"
+    ),
+    "editor": (
+        "중간에 해제할 수 없어요",
+        "강제 잠금 사용 시 실행 중인 차단을\n중지하거나 삭제할 수 없습니다."
+    ),
+    "appearance": (
+        "내 취향대로",
+        "다섯 가지 테마와\n어울리는 앱 아이콘"
+    ),
+    "lockin": (
+        "며칠 동안 규칙 고정",
+        "모든 규칙을 고정\n완화 및 앱 삭제 불가"
+    )
+}
 
 W, H = 1320, 2868
 INK, MUTED, BRASS = (233, 230, 223), (154, 161, 177), (200, 169, 106)
@@ -75,8 +107,13 @@ def compose(raw, title, sub):
 
 def main():
     raw_dir, out_dir = sys.argv[1], sys.argv[2]
+    korean = len(sys.argv) > 3 and sys.argv[3] == "ko"
     os.makedirs(out_dir, exist_ok=True)
     for i, (name, title, sub) in enumerate(SHOTS, 1):
+        if korean:
+            if name not in SHOTS_KO:
+                print("no Korean caption for", name); continue
+            title, sub = SHOTS_KO[name]
         out = os.path.join(out_dir, f"{i:02d}-{name}.png")
         compose(os.path.join(raw_dir, f"{name}.png"), title, sub).save(out, optimize=True)
         print("wrote", out)

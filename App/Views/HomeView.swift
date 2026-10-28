@@ -26,11 +26,14 @@ struct HomeTab: View {
                     Section("Blocking now") {
                         ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
                             HStack(spacing: 12) {
-                                Image(systemName: b.kind == .timeout ? "cup.and.saucer.fill" : "lock.fill")
+                                Image(systemName: b.kind == .timeout ? "cup.and.saucer.fill" : (b.kind == .place ? "mappin.circle.fill" : "lock.fill"))
                                     .foregroundStyle(Palette.brass).frame(width: 22)
-                                Text(b.name).foregroundStyle(Palette.ink)
+                                if let r = b.rule { BlockName(rule: r).foregroundStyle(Palette.ink).lineLimit(1) }
+                                else { Text(b.name).foregroundStyle(Palette.ink) }
                                 Spacer()
-                                Text("until \(Fmt.moment(b.until, now: model.now))").foregroundStyle(Palette.muted)
+                                Text(b.until == .distantFuture ? String(localized: "until you leave")
+                                                               : String(localized: "until \(Fmt.moment(b.until, now: model.now))"))
+                                    .foregroundStyle(Palette.muted)
                             }
                             .font(.p(16, .regular))
                         }
@@ -63,7 +66,7 @@ struct HomeTab: View {
                 if let next = model.nextStart {
                     Section("Up next") {
                         HStack {
-                            Text(next.name).foregroundStyle(Palette.ink)
+                            BlockName(rule: next.rule).foregroundStyle(Palette.ink).lineLimit(1)
                             Spacer()
                             Text(Fmt.moment(next.at, now: model.now)).foregroundStyle(Palette.muted)
                         }
@@ -95,7 +98,8 @@ struct StatusHero: View {
                 .font(.p(40, .light, .largeTitle))
                 .foregroundStyle(Palette.ink)
             if let first = blocks.first {
-                Text("Next unlock in \(durationText(first.until.timeIntervalSince(model.now)))")
+                Text(first.until == .distantFuture ? String(localized: "Unlocks when you leave")
+                                                   : String(localized: "Next unlock in \(durationText(first.until.timeIntervalSince(model.now)))"))
                     .font(.p(15, .medium, .subheadline)).foregroundStyle(Palette.brass)
             } else if model.state.rules.isEmpty && model.activeSession == nil {
                 Text("Nothing is blocked yet.").font(.p(15, .regular, .subheadline)).foregroundStyle(Palette.muted)
@@ -109,18 +113,23 @@ struct StatusHero: View {
 
 /// A block without Strict lock that the user asked to stop, and what to say about it.
 enum StopTarget: Identifiable {
+    /// `name` is empty when none was typed (the dialogs then say "this block").
     case rule(UUID, name: String, status: RuleStatus)
     case session(until: Date)
 
-    init(_ rule: Rule, _ status: RuleStatus) { self = .rule(rule.id, name: rule.plan.name, status: status) }
+    init(_ rule: Rule, _ status: RuleStatus) {
+        self = .rule(rule.id, name: rule.plan.hasName ? rule.plan.displayName : "", status: status)
+    }
 
     var id: String {
         switch self { case .rule(let id, _, _): id.uuidString; case .session: "session" }
     }
     var title: String {
         switch self {
-        case .rule(_, let name, .onBreak): String(localized: "End the break for \(name)?")
-        case .rule(_, let name, _): String(localized: "Stop \(name)?")
+        case .rule(_, let name, .onBreak) where !name.isEmpty: String(localized: "End the break for \(name)?")
+        case .rule(_, _, .onBreak): String(localized: "End this break?")
+        case .rule(_, let name, _) where !name.isEmpty: String(localized: "Stop \(name)?")
+        case .rule: String(localized: "Stop this block?")
         case .session: String(localized: "Stop Block now?")
         }
     }
@@ -130,6 +139,7 @@ enum StopTarget: Identifiable {
             String(localized: "It stays off until \(Fmt.time(until)) and starts again on its own next time.")
         case .rule(_, _, .reached(let until)): String(localized: "The apps open until \(Fmt.moment(until)). Then the limit starts again.")
         case .rule(_, _, .onBreak): String(localized: "The apps open now and the count starts over.")
+        case .rule(_, _, .atPlace): String(localized: "The apps open now. It starts again the next time you arrive.")
         case .rule: String(localized: "It starts again on its own next time.")
         case .session: String(localized: "The apps open now.")
         }
@@ -145,8 +155,10 @@ enum StopTarget: Identifiable {
     }
     var done: String {
         switch self {
-        case .rule(_, let name, .onBreak): String(localized: "The break for \(name) is over.")
-        case .rule(_, let name, _): String(localized: "\(name) is stopped.")
+        case .rule(_, let name, .onBreak) where !name.isEmpty: String(localized: "The break for \(name) is over.")
+        case .rule(_, _, .onBreak): String(localized: "The break is over.")
+        case .rule(_, let name, _) where !name.isEmpty: String(localized: "\(name) is stopped.")
+        case .rule: String(localized: "The block is stopped.")
         case .session: String(localized: "Block now is stopped.")
         }
     }

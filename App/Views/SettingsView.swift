@@ -7,6 +7,7 @@ struct SettingsTab: View {
     @State private var showGuide = false
     @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
     @State private var icon = SettingsTab.currentIcon
+    @State private var aboutOpen = false
 
     var body: some View {
         NavigationStack {
@@ -54,9 +55,9 @@ struct SettingsTab: View {
             ForEach(model.heldRules) { rule in
                 if let until = model.strictHold(rule) {
                     LabeledContent {
-                        Text("Strict until \(Fmt.moment(until, now: model.now))").foregroundStyle(Palette.brass)
+                        Text("Strict until \(model.holdText(rule, until))").foregroundStyle(Palette.brass)
                     } label: {
-                        Label(rule.plan.name, systemImage: "lock")
+                        Label { BlockName(rule: rule) } icon: { Image(systemName: "lock") }
                     }
                     .font(.p(15, .regular, .subheadline))
                 }
@@ -177,23 +178,26 @@ struct SettingsTab: View {
 
     // MARK: about
 
+    /// About Arc Lock, folded away until it's wanted (a tap opens it in place).
     private var aboutSection: some View {
         Section {
-            link("How Arc Lock works", "https://github.com/WeldingArc/arc-lock#how-it-works")
-            link("Source code (MIT)", "https://github.com/WeldingArc/arc-lock")
-            link("Privacy: nothing leaves this iPhone", "https://github.com/WeldingArc/arc-lock/blob/main/PRIVACY.md")
-            link("Report a problem", "https://github.com/WeldingArc/arc-lock/issues")
-            Button { showGuide = true } label: {
-                HStack {
-                    Text("Extra protection with a friend").foregroundStyle(Palette.ink)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
+            DisclosureGroup(isExpanded: $aboutOpen) {
+                link("How Arc Lock works", "https://github.com/WeldingArc/arc-lock#how-it-works")
+                link("Source code (MIT)", "https://github.com/WeldingArc/arc-lock")
+                link("Privacy: Arc Lock collects nothing", "https://github.com/WeldingArc/arc-lock/blob/main/PRIVACY.md")
+                link("Report a problem", "https://github.com/WeldingArc/arc-lock/issues")
+                Button { showGuide = true } label: {
+                    HStack {
+                        Text("Extra protection with a friend").foregroundStyle(Palette.ink)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } label: {
+                Text("About").foregroundStyle(Palette.ink)
             }
-            .buttonStyle(.plain)
-        } header: {
-            Text("About")
         } footer: {
             Text("Arc Lock \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · Open source, no account, no ads.")
         }

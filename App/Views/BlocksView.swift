@@ -5,12 +5,14 @@ import SwiftUI
 /// Strict lock shows Stop (and can be swiped to stop).
 struct BlocksTab: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject private var places = PlaceWatcher.shared
     let openBlockNow: () -> Void
     @State private var editing: EditorTarget?
     @State private var stopping: StopTarget?
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
                 section("Schedules", kind: .schedule, rules: model.schedules,
                         empty: "Pick apps and websites and the hours they stay locked.")
@@ -18,6 +20,9 @@ struct BlocksTab: View {
                         empty: "After the time you allow each day, apps lock until the limit resets.")
                 section("Time-outs", kind: .timeout, rules: model.timeouts,
                         empty: "After a stretch of use, apps take a short break, then open again.")
+                section("Places", kind: .place, rules: model.places,
+                        empty: "Pick a place: apps lock when you arrive, and open again when you leave or after a set time.")
+                    .id("places")
                 Section {} footer: {
                     Text(model.strictLockActive
                          ? "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted."
@@ -48,11 +53,19 @@ struct BlocksTab: View {
                 Text(target.message)
             }
             #if DEBUG
+            .task {
+                if Demo.shot == "places" { try? await Task.sleep(for: .milliseconds(400)); proxy.scrollTo("places", anchor: .top) }
+            }
+            #endif
+            }
+            #if DEBUG
             .onAppear {
                 switch Demo.shot {
+                case "placenew", "placepicker": editing = .new(.place)
                 case "editor": editing = .edit(Demo.study)
                 case "limit": editing = .edit(Demo.social)
                 case "timeout": editing = .edit(Demo.shorts)
+                case "place": editing = .edit(Demo.library)
                 default: break
                 }
             }
@@ -81,9 +94,33 @@ struct BlocksTab: View {
         } header: {
             Text(title)
         } footer: {
-            if rules.isEmpty { Text(empty) }
+            if rules.isEmpty {
+                Text(empty)
+            } else if kind == .place, let note = placesNote {
+                Text(note).foregroundStyle(Palette.rose)
+            }
         }
         .listRowBackground(Palette.card)
+    }
+
+    /// What's missing for place blocks to work, if anything.
+    private var placesNote: LocalizedStringKey? {
+        if isDemo { return nil }
+        switch places.access {
+        case .always: return nil
+        case .whileUsing: return "Location access is “While Using”, so place blocks can't start or end while Arc Lock is closed. You can change it in Settings › Arc Lock › Location."
+        case .approximate: return "Precise Location is off for Arc Lock, so iOS can't tell when you arrive or leave. You can change it in Settings › Arc Lock › Location."
+        case .denied: return "Location access is off for Arc Lock, so place blocks can't start or end. You can change it in Settings › Arc Lock › Location."
+        case .notAsked: return "Location access isn't set up yet. Open a place block and tap Continue."
+        }
+    }
+
+    private var isDemo: Bool {
+        #if DEBUG
+        return Demo.isOn
+        #else
+        return false
+        #endif
     }
 
     private func addTitle(_ kind: RuleKind) -> LocalizedStringKey {
@@ -91,6 +128,7 @@ struct BlocksTab: View {
         case .schedule: "New schedule"
         case .limit: "New daily limit"
         case .timeout: "New time-out"
+        case .place: "New place block"
         }
     }
 
@@ -99,6 +137,7 @@ struct BlocksTab: View {
         case .schedule: "calendar.badge.clock"
         case .limit: "hourglass"
         case .timeout: "cup.and.saucer"
+        case .place: "mappin.and.ellipse"
         }
     }
 
@@ -144,7 +183,7 @@ struct BlockRow: View {
         let status = model.status(rule)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(rule.plan.name).font(.p(17, .semibold, .headline))
+                BlockName(rule: rule).font(.p(17, .semibold, .headline))
                     .foregroundStyle(rule.plan.isOn ? Palette.ink : Palette.faint)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -171,7 +210,7 @@ struct BlockRow: View {
                 }
             }
             if let until = model.strictHold(rule) {
-                Label("Strict until \(Fmt.moment(until, now: model.now))", systemImage: "lock")
+                Label("Strict until \(model.holdText(rule, until))", systemImage: "lock")
                     .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.brass)
             }
             if let p = rule.pending {
@@ -198,6 +237,14 @@ struct BlockRow: View {
         case .schedule: return "\(p.start.text) – \(p.end.text) · \(p.days.dayText)"
         case .limit: return String(localized: "\(minutesText(p.limitMinutes)) a day · \(p.days.dayText)") + reset
         case .timeout: return String(localized: "\(minutesText(p.breakMinutes)) break after \(minutesText(p.limitMinutes)) · \(p.days.dayText)") + reset
+        case .place:
+            let place: String = switch p.places.count {
+            case 0: String(localized: "No place yet")
+            case 1: p.places[0].name
+            default: String(localized: "\(p.places[0].name) + \(p.places.count - 1) more")
+            }
+            let ending = p.untilLeave ? String(localized: "until you leave") : String(localized: "for \(minutesText(p.placeMinutes))")
+            return "\(place) · \(ending) · \(p.days.dayText)"
         }
     }
 
@@ -212,6 +259,49 @@ struct BlockRow: View {
         case .reached: Pill(text: String(localized: "Used up"), tint: Palette.rose, icon: "lock.fill")
         case .onBreak(let until): Pill(text: String(localized: "Break until \(Fmt.time(until))"), tint: Palette.brass, icon: "cup.and.saucer.fill")
         case .stopped(let until): Pill(text: String(localized: "Stopped until \(Fmt.moment(until, now: model.now))"), tint: Palette.faint, icon: "pause.fill")
+        case .atPlace: Pill(text: String(localized: "Until you leave"), tint: Palette.brass, icon: "lock.fill")
+        case .away:
+            if model.isAtPlace(rule) { Pill(text: String(localized: "Done for now"), tint: Palette.faint) }
+            else { Pill(text: String(localized: "When you arrive"), icon: "mappin") }
         }
+    }
+}
+
+/// A block's name. With none typed: the first app (or category, or website) it blocks, drawn by iOS — Arc Lock itself
+/// never learns the names — plus how many more. Typing a name in the editor replaces it.
+struct BlockName: View {
+    let plan: RulePlan
+    let selection: FamilyActivitySelection
+    init(rule: Rule) { plan = rule.plan; selection = rule.selection }
+    init(plan: RulePlan, selection: FamilyActivitySelection) { self.plan = plan; self.selection = selection }
+
+    var body: some View {
+        let more = selection.itemCount + plan.domains.count - 1
+        if plan.hasName {
+            Text(plan.displayName)
+        } else if let app = Self.first(selection.applicationTokens) {
+            named(Label(app), more: more)
+        } else if let category = Self.first(selection.categoryTokens) {
+            named(Label(category), more: more)
+        } else if let site = Self.first(selection.webDomainTokens) {
+            named(Label(site), more: more)
+        } else {
+            Text(plan.displayName)          // typed websites only, a place, or nothing chosen
+        }
+    }
+
+    private func named(_ label: some View, more: Int) -> some View {
+        HStack(spacing: 5) {
+            label.labelStyle(.titleOnly)
+            if more > 0 { Text("+\(more)") }
+        }
+    }
+
+    /// The same item every time (a set's order changes from launch to launch).
+    static func first<T: Encodable & Hashable>(_ items: Set<T>) -> T? {
+        items.min { key($0) < key($1) }
+    }
+    private static func key<T: Encodable>(_ item: T) -> String {
+        (try? JSONEncoder().encode(item)).map { $0.base64EncodedString() } ?? ""
     }
 }

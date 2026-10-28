@@ -140,7 +140,7 @@ struct CoreTests {
         var tiny = work; tiny.end = TimeOfDay(9, 10)
         check(Validate.problems(tiny, appCount: 1, hasSelection: true).contains(.windowTooShort), "10-minute window rejected")
         var noName = work; noName.name = "  "
-        check(Validate.problems(noName, appCount: 1, hasSelection: true).contains(.noName), "blank name rejected")
+        check(Validate.problems(noName, appCount: 1, hasSelection: true).isEmpty, "a blank name is fine (the app shows the first app's name)")
         check(Validate.problems(work, appCount: 0, hasSelection: false).contains(.nothingChosen), "nothing chosen rejected")
         check(!Validate.problems(withSite, appCount: 0, hasSelection: false).contains(.nothingChosen), "a typed website alone is enough for a schedule")
         var siteLimit = social; siteLimit.domains = ["youtube.com"]
@@ -436,6 +436,105 @@ struct CoreTests {
         let sleepHours = RulePlan(name: "Sleep", kind: .schedule, start: TimeOfDay(22, 0), end: TimeOfDay(7, 0))
         check(StrictHold.until(sleepHours, status: .running(until: date("2026-10-13 07:00", seoul)), now: date("2026-10-12 23:00", seoul), calendar: seoul)
               == date("2026-10-13 07:00", seoul), "an overnight schedule: until 7 AM, past midnight")
+
+        // 1.2.0: place blocks
+        let library = PlaceSpot(latitude: 37.5665, longitude: 126.9780, radius: 150, name: "Library")
+        let atLibrary = RulePlan(name: "Library", kind: .place, days: [2, 3, 4, 5, 6], places: [library], untilLeave: true)
+        var timed = atLibrary; timed.untilLeave = false; timed.placeMinutes = 120
+        check(!RuleKind.place.countsUse, "a place block doesn't count use")
+        check(Validate.problems(atLibrary, appCount: 1, hasSelection: true).isEmpty, "a place block with a place is valid")
+        var noSpot = atLibrary; noSpot.places = []
+        check(Validate.problems(noSpot, appCount: 1, hasSelection: true).contains(.noPlace), "a place block needs a place")
+        var smallCircle = atLibrary; smallCircle.places[0].radius = 50
+        check(Validate.problems(smallCircle, appCount: 1, hasSelection: true).contains(.limitOutOfRange), "a 50 m circle is too small")
+        var tooLong = timed; tooLong.placeMinutes = 13 * 60
+        check(Validate.problems(tooLong, appCount: 1, hasSelection: true).contains(.limitOutOfRange), "13 h is too long")
+        let monday9 = date("2026-10-12 09:00", seoul)
+        check(Status.of(atLibrary, now: monday9, reachedAt: nil, visit: nil, calendar: seoul) == .away, "no visit: away")
+        var lv = PlaceRules.update(nil, plan: atLibrary, inside: true, now: monday9, calendar: seoul)
+        check(lv.started == monday9 && lv.ends == nil, "arriving on a selected day starts it, until you leave")
+        let safety = monday9.addingTimeInterval(12 * 3600)
+        check(Status.of(atLibrary, now: monday9.addingTimeInterval(3 * 3600), reachedAt: nil, visit: lv, calendar: seoul) == .atPlace(latest: safety),
+              "it runs while you're there")
+        check(Policy.access(status: .atPlace(latest: safety), lockInUntil: nil, strict: true, now: monday9, calendar: seoul)
+              == .locked(until: safety, reason: .atPlace), "a strict place block is read-only until you leave")
+        check(Policy.access(status: .atPlace(latest: safety), lockInUntil: nil, strict: false, now: monday9, calendar: seoul) == .free,
+              "one without Strict lock can be stopped")
+        check(Status.of(atLibrary, now: safety.addingTimeInterval(1), reachedAt: nil, visit: lv, calendar: seoul) == .away,
+              "a block that ends when you leave ends after 12 hours at the latest")
+        check(PlaceRules.latestEnd(lv, now: monday9) == safety, "its latest end is the safety end")
+        check(PlaceRules.update(lv, plan: atLibrary, inside: true, now: monday9.addingTimeInterval(60), calendar: seoul) == lv,
+              "a repeated 'inside' changes nothing")
+        let leftAt = monday9.addingTimeInterval(2 * 3600)
+        lv = PlaceRules.update(lv, plan: atLibrary, inside: false, now: leftAt, calendar: seoul)
+        check(lv.ends == leftAt && Status.of(atLibrary, now: leftAt.addingTimeInterval(1), reachedAt: nil, visit: lv, calendar: seoul) == .away,
+              "leaving ends it")
+        let back = leftAt.addingTimeInterval(3600)
+        lv = PlaceRules.update(lv, plan: atLibrary, inside: true, now: back, calendar: seoul)
+        check(lv.started == back && lv.ends == nil, "coming back starts a new one")
+        let sunday = date("2026-10-18 10:00", seoul)
+        let sv = PlaceRules.update(nil, plan: atLibrary, inside: true, now: sunday, calendar: seoul)
+        check(sv.started == nil && Status.of(atLibrary, now: sunday, reachedAt: nil, visit: sv, calendar: seoul) == .away,
+              "arriving on a day it isn't set for doesn't start it")
+        var tv = PlaceRules.update(nil, plan: timed, inside: true, now: monday9, calendar: seoul)
+        let twoHours = monday9.addingTimeInterval(7200)
+        check(tv.ends == twoHours, "'after 2 h' ends two hours after arriving")
+        tv = PlaceRules.update(tv, plan: timed, inside: false, now: monday9.addingTimeInterval(1800), calendar: seoul)
+        check(Status.of(timed, now: monday9.addingTimeInterval(1801), reachedAt: nil, visit: tv, calendar: seoul) == .running(until: twoHours),
+              "leaving early doesn't end a block set to a time")
+        tv = PlaceRules.update(tv, plan: timed, inside: true, now: monday9.addingTimeInterval(3600), calendar: seoul)
+        check(tv.started == monday9 && tv.ends == twoHours, "coming back while it still runs doesn't restart it")
+        let stillThere = PlaceRules.update(PlaceRules.update(nil, plan: timed, inside: true, now: monday9, calendar: seoul),
+                                           plan: timed, inside: true, now: twoHours.addingTimeInterval(600), calendar: seoul)
+        check(Status.of(timed, now: twoHours.addingTimeInterval(600), reachedAt: nil, visit: stillThere, calendar: seoul) == .away,
+              "after its time it's over for this visit, even if you stay")
+        let stopped = PlaceRules.stop(PlaceRules.update(nil, plan: atLibrary, inside: true, now: monday9, calendar: seoul), now: monday9.addingTimeInterval(60))
+        check(Status.of(atLibrary, now: monday9.addingTimeInterval(61), reachedAt: nil, visit: stopped, calendar: seoul) == .away,
+              "stopped by hand: over for this visit")
+        check(StrictHold.until(atLibrary, status: .atPlace(latest: safety), now: monday9, calendar: seoul) == safety,
+              "Strict lock off: a running place block stays strict until you leave (12 h at most)")
+        check(StrictHold.until(timed, status: .running(until: twoHours), now: monday9, calendar: seoul) == twoHours,
+              "…or until its set time ends")
+        check(StrictHold.until(atLibrary, status: .away, now: monday9, calendar: seoul) == nil, "an idle place block holds nothing")
+        var otherSpot = atLibrary; otherSpot.places[0].latitude += 0.01
+        check(PlaceRules.restartsVisit(from: atLibrary, to: otherSpot) && !PlaceRules.restartsVisit(from: atLibrary, to: atLibrary),
+              "moving the place starts a new visit")
+        check(Change.direction(from: atLibrary, to: otherSpot) == .looser, "another place counts as looser")
+        check(Capacity.activities(for: [atLibrary, timed]) == 2, "a place block takes one monitor (its end)")
+        if let data = try? JSONEncoder().encode(RulePlan(name: "Old", kind: .limit)),
+           var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            json.removeValue(forKey: "places"); json.removeValue(forKey: "untilLeave"); json.removeValue(forKey: "placeMinutes")
+            let old = try? JSONDecoder().decode(RulePlan.self, from: JSONSerialization.data(withJSONObject: json))
+            check(old?.untilLeave == true && old?.placeMinutes == 60 && old?.places == [], "blocks saved before Places still load")
+            json["place"] = ["latitude": 1.0, "longitude": 2.0, "radius": 150.0, "name": "Old spot"]
+            let single = try? JSONDecoder().decode(RulePlan.self, from: JSONSerialization.data(withJSONObject: json))
+            check(single?.places.first?.name == "Old spot" && single?.places.count == 1, "an early 1.2 block's single place loads as a list")
+        } else { check(false, "fixture: encode a plan") }
+        // several places in one block: there while inside any; leaving the last one ends it
+        let cafe = PlaceSpot(latitude: 37.5600, longitude: 126.9400, radius: 150, name: "Cafe")
+        let twoSpots = RulePlan(name: "Study spots", kind: .place, days: Set(1...7), places: [library, cafe], untilLeave: true)
+        var mv = PlaceRules.update(nil, plan: twoSpots, spot: 0, inside: true, now: monday9, calendar: seoul)
+        check(mv.started == monday9 && mv.spots == [0], "arriving at either place starts it")
+        mv = PlaceRules.update(mv, plan: twoSpots, spot: 1, inside: true, now: monday9.addingTimeInterval(60), calendar: seoul)
+        check(mv.started == monday9 && mv.spots == [0, 1], "reaching the second place (overlapping) doesn't restart it")
+        mv = PlaceRules.update(mv, plan: twoSpots, spot: 0, inside: false, now: monday9.addingTimeInterval(120), calendar: seoul)
+        check(mv.ends == nil && Status.of(twoSpots, now: monday9.addingTimeInterval(121), reachedAt: nil, visit: mv, calendar: seoul) == .atPlace(latest: monday9.addingTimeInterval(12 * 3600)),
+              "leaving one while still at the other keeps it running")
+        mv = PlaceRules.update(mv, plan: twoSpots, spot: 1, inside: false, now: monday9.addingTimeInterval(180), calendar: seoul)
+        check(mv.ends == monday9.addingTimeInterval(180) && mv.spots.isEmpty, "leaving the last place ends it")
+        let legacy = PlaceVisit(inside: true, started: monday9)          // saved before places were told apart
+        let left = PlaceRules.update(legacy, plan: twoSpots, spot: 0, inside: false, now: monday9.addingTimeInterval(300), calendar: seoul)
+        check(left.ends == monday9.addingTimeInterval(300), "an older visit still ends when you leave")
+        // a missed exit (location off, a restart): the next real arrival starts a new block
+        var missed = PlaceRules.update(nil, plan: twoSpots, spot: 0, inside: true, now: monday9, calendar: seoul)
+        missed = PlaceRules.stop(missed, now: monday9.addingTimeInterval(60))!           // over for that visit
+        let nextDay = monday9.addingTimeInterval(24 * 3600)
+        let again = PlaceRules.update(missed, plan: twoSpots, spot: 0, inside: true, entered: true, now: nextDay, calendar: seoul)
+        check(again.started == nextDay && again.spots == [0], "arriving again after a missed exit starts it")
+        let answer = PlaceRules.update(missed, plan: twoSpots, spot: 0, inside: true, now: nextDay, calendar: seoul)
+        check(answer.started == missed.started, "a plain 'you're inside' answer doesn't")
+        var tooMany = twoSpots; tooMany.places = Array(repeating: library, count: 21)
+        check(Validate.problems(tooMany, appCount: 1, hasSelection: true).contains(.tooManyPlaces), "iOS watches at most 20 places")
 
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)

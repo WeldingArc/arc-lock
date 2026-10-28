@@ -21,8 +21,23 @@ public enum RuleKind: String, Codable, CaseIterable, Sendable {
     case schedule, limit
     /// After `limitMinutes` of use the apps take a break of `breakMinutes`, then unlock; repeats all day.
     case timeout
-    /// Kinds that count use (a monitor with a usage threshold) rather than following the clock.
-    public var countsUse: Bool { self != .schedule }
+    /// Starts when you arrive at a place; ends when you leave, or after `placeMinutes` (the block's choice).
+    case place
+    /// Kinds that count use (a monitor with a usage threshold) rather than following the clock or a place.
+    public var countsUse: Bool { self == .limit || self == .timeout }
+}
+
+/// Places: the circle on the map a place block watches.
+public struct PlaceSpot: Codable, Hashable, Sendable {
+    public var latitude: Double
+    public var longitude: Double
+    /// Meters (Limits.placeRadius). iOS notices arriving and leaving reliably from about 100 m.
+    public var radius: Double
+    /// What the user calls it ("Library"), or its address.
+    public var name: String
+    public init(latitude: Double, longitude: Double, radius: Double = Limits.defaultPlaceRadius, name: String = "") {
+        self.latitude = latitude; self.longitude = longitude; self.radius = radius; self.name = name
+    }
 }
 
 /// Everything about a block except the chosen apps (Apple's opaque tokens live next to it, in the app).
@@ -43,19 +58,30 @@ public struct RulePlan: Codable, Hashable, Sendable {
     public var strict: Bool
     /// Daily limits and time-outs: when the count starts over (12:00 AM unless the user picks another time).
     public var resetAt: TimeOfDay
+    /// Places: where it starts — arriving at any of them (empty until one is picked).
+    public var places: [PlaceSpot]
+    /// Places: true = it ends when you leave; false = it ends `placeMinutes` after you arrive, even if you leave sooner.
+    public var untilLeave: Bool
+    /// Places: how long it lasts when it doesn't end on leaving.
+    public var placeMinutes: Int
 
     public init(name: String = "", kind: RuleKind = .schedule, isOn: Bool = true,
                 start: TimeOfDay = TimeOfDay(9, 0), end: TimeOfDay = TimeOfDay(17, 0),
                 days: Set<Int> = Set(1...7), limitMinutes: Int = 30, domains: [String] = [],
-                breakMinutes: Int = 10, strict: Bool = true, resetAt: TimeOfDay = .midnight) {
+                breakMinutes: Int = 10, strict: Bool = true, resetAt: TimeOfDay = .midnight,
+                places: [PlaceSpot] = [], untilLeave: Bool = true, placeMinutes: Int = 60) {
         self.name = name; self.kind = kind; self.isOn = isOn; self.start = start; self.end = end
         self.days = days; self.limitMinutes = limitMinutes; self.domains = domains
         self.breakMinutes = breakMinutes; self.strict = strict; self.resetAt = resetAt
+        self.places = places; self.untilLeave = untilLeave; self.placeMinutes = placeMinutes
     }
 
     enum CodingKeys: String, CodingKey {
         case name, kind, isOn, start, end, days, limitMinutes, domains, breakMinutes, strict, resetAt
+        case places, untilLeave, placeMinutes
     }
+    /// Read only: an early 1.2 build kept a single place.
+    enum OlderKeys: String, CodingKey { case place }
 
     /// Fields added in later versions fall back to their defaults, so saved blocks always load.
     public init(from decoder: Decoder) throws {
@@ -71,6 +97,14 @@ public struct RulePlan: Codable, Hashable, Sendable {
         breakMinutes = (try? c.decode(Int.self, forKey: .breakMinutes)) ?? 10
         strict = (try? c.decode(Bool.self, forKey: .strict)) ?? true
         resetAt = (try? c.decode(TimeOfDay.self, forKey: .resetAt)) ?? .midnight
+        if let all = try? c.decode([PlaceSpot].self, forKey: .places) {
+            places = all
+        } else {
+            let older = try? decoder.container(keyedBy: OlderKeys.self)
+            places = (try? older?.decode(PlaceSpot.self, forKey: .place)).flatMap { $0 }.map { [$0] } ?? []
+        }
+        untilLeave = (try? c.decode(Bool.self, forKey: .untilLeave)) ?? true
+        placeMinutes = (try? c.decode(Int.self, forKey: .placeMinutes)) ?? 60
     }
 }
 
@@ -82,6 +116,15 @@ public enum Limits {
     public static let timeoutUseMinutes = 5...240
     public static let breakMinutes = 1...120
     public static let sessionMinutes = 15...(12 * 60)
+    /// Places: the circle's radius in meters (iOS can't tell smaller circles apart reliably) and how long a block set
+    /// to end after a set time lasts (its end is a one-off monitor, so at least 15 minutes).
+    public static let placeRadius = 100.0...1000.0
+    public static let defaultPlaceRadius = 150.0
+    public static let placeMinutes = 15...(12 * 60)
+    /// A place block set to end when you leave ends after this long at the latest (location off, a missed exit).
+    public static let placeSafetyMinutes = 12 * 60
+    /// iOS watches at most 20 places (regions) for an app, across all its place blocks.
+    public static let maxPlaces = 20
     /// A schedule must leave time between windows, or it could never be changed again. 22 h leaves a 2-hour gap,
     /// which is still at least an hour on the day the clocks spring forward.
     public static let maxWindowMinutes = 22 * 60
@@ -195,9 +238,14 @@ public enum RuleStatus: Equatable, Sendable {
     case onBreak(until: Date)
     /// A block that is not strict, stopped by hand until `until` (when it would have ended anyway).
     case stopped(until: Date)
+    /// A place block running until you leave — or, at the latest, `latest` (12 hours after arriving: a safety end
+    /// in case leaving is never seen). One set to end after a time is `.running`.
+    case atPlace(latest: Date)
+    /// A place block that isn't running: you're not there, it's a day it doesn't start, or this visit's block is over.
+    case away
 
     public var isBlocking: Bool {
-        switch self { case .running, .reached, .onBreak: return true; default: return false }
+        switch self { case .running, .reached, .onBreak, .atPlace: return true; default: return false }
     }
     public var blockingUntil: Date? {
         switch self { case .running(let u), .reached(let u), .onBreak(let u): return u; default: return nil }
@@ -208,7 +256,8 @@ public enum Status {
     /// `reachedAt` is when the monitor extension last saw this limit's threshold, `breakUntil` when a time-out's
     /// current break ends, `stoppedUntil` until when a non-strict block was stopped by hand.
     public static func of(_ plan: RulePlan, now: Date, reachedAt: Date?, breakUntil: Date? = nil,
-                          stoppedUntil: Date? = nil, calendar: Calendar) -> RuleStatus {
+                          stoppedUntil: Date? = nil, visit: PlaceVisit? = nil, calendar: Calendar) -> RuleStatus {
+        if plan.kind == .place { return plan.isOn ? PlaceRules.status(visit, now: now) : .off }
         let s = raw(plan, now: now, reachedAt: reachedAt, breakUntil: breakUntil, calendar: calendar)
         if let until = s.blockingUntil, let stop = stoppedUntil, stop > now, stop >= until.addingTimeInterval(-1) {
             return .stopped(until: until)
@@ -232,13 +281,123 @@ public enum Status {
                 return .reached(until: Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
             }
             return .counting
+        case .place:
+            return .away       // handled in `of`
         }
+    }
+}
+
+// MARK: - Places
+
+/// A place block's current visit, kept by the app as iOS reports arriving and leaving.
+public struct PlaceVisit: Codable, Equatable, Sendable {
+    /// At one of the block's places, as last reported.
+    public var inside: Bool
+    /// When this visit's block started (nil: it didn't, e.g. on a day the block doesn't start).
+    public var started: Date?
+    /// When it ends or ended: the set time after arriving, or the moment you left. nil while it runs until you leave.
+    public var ends: Date?
+    /// Which of the block's places (by position) iOS last reported you inside.
+    public var spots: Set<Int>
+    public init(inside: Bool, started: Date? = nil, ends: Date? = nil, spots: Set<Int> = []) {
+        self.inside = inside; self.started = started; self.ends = ends; self.spots = spots
+    }
+    enum CodingKeys: String, CodingKey { case inside, started, ends, spots }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        inside = (try? c.decode(Bool.self, forKey: .inside)) ?? false
+        started = try? c.decode(Date.self, forKey: .started)
+        ends = try? c.decode(Date.self, forKey: .ends)
+        spots = (try? c.decode(Set<Int>.self, forKey: .spots)) ?? []
+    }
+}
+
+public enum PlaceRules {
+    /// The visit after iOS reports being inside (`inside`) or outside the place at `now`. Arriving on a selected day
+    /// starts the block — unless one from an earlier arrival is still running; it ends after its set time, or when you
+    /// leave. One block per visit: once it's over you have to leave and come back for the next.
+    public static func update(_ visit: PlaceVisit?, plan: RulePlan, inside: Bool, now: Date, calendar: Calendar) -> PlaceVisit {
+        var v = visit ?? PlaceVisit(inside: false)
+        let wasInside = v.inside
+        v.inside = inside
+        if inside && !wasInside {
+            if !isRunning(v, now: now) {
+                if plan.days.contains(calendar.component(.weekday, from: now)) {
+                    v.started = now
+                    v.ends = plan.untilLeave ? nil : now.addingTimeInterval(TimeInterval(plan.placeMinutes * 60))
+                } else {
+                    v.started = nil
+                    v.ends = nil
+                }
+            }
+        } else if !inside && wasInside, plan.untilLeave, v.started != nil, v.ends == nil {
+            v.ends = now
+        }
+        return v
+    }
+
+    /// The visit after iOS reports being inside (or outside) one of the block's places (`spot` = its position).
+    /// You're "there" while inside any of them: arriving at the first starts the block, leaving the last ends it.
+    /// `entered` = iOS reported crossing into the place (not just a "you're inside" answer): if this place was still
+    /// marked as inside, its exit was missed (location off, a restart) — that visit is over, and this is a new arrival.
+    public static func update(_ visit: PlaceVisit?, plan: RulePlan, spot: Int, inside: Bool, entered: Bool = false,
+                              now: Date, calendar: Calendar) -> PlaceVisit {
+        var visit = visit
+        var spots = visit?.spots ?? []
+        // a visit saved before places were told apart: being inside counted for the whole block
+        if spots.isEmpty, visit?.inside == true { spots = [spot] }
+        if entered, inside, spots.contains(spot) {
+            spots.remove(spot)
+            if spots.isEmpty, let v = visit {
+                var left = update(v, plan: plan, inside: false, now: now, calendar: calendar)
+                left.spots = []
+                visit = left
+            }
+        }
+        if inside { spots.insert(spot) } else { spots.remove(spot) }
+        var v = update(visit, plan: plan, inside: !spots.isEmpty, now: now, calendar: calendar)
+        v.spots = spots
+        return v
+    }
+
+    /// Stopped by hand (a block without Strict lock): over for this visit.
+    public static func stop(_ visit: PlaceVisit?, now: Date) -> PlaceVisit? {
+        guard var v = visit, isRunning(v, now: now) else { return visit }
+        v.ends = now
+        return v
+    }
+
+    public static func isRunning(_ v: PlaceVisit?, now: Date) -> Bool {
+        guard let v, let started = v.started else { return false }
+        return (v.ends ?? safetyEnd(started)) > now
+    }
+
+    /// When a block that ends when you leave ends at the latest.
+    public static func safetyEnd(_ started: Date) -> Date {
+        started.addingTimeInterval(TimeInterval(Limits.placeSafetyMinutes * 60))
+    }
+
+    /// When the visit's block ends at the latest (its set time, or the safety end); nil when it isn't running.
+    public static func latestEnd(_ v: PlaceVisit?, now: Date) -> Date? {
+        guard let v, let started = v.started, isRunning(v, now: now) else { return nil }
+        return v.ends ?? safetyEnd(started)
+    }
+
+    static func status(_ v: PlaceVisit?, now: Date) -> RuleStatus {
+        guard let v, let started = v.started, isRunning(v, now: now) else { return .away }
+        return v.ends.map { .running(until: $0) } ?? .atPlace(latest: safetyEnd(started))
+    }
+
+    /// Whether a change to the plan starts a new visit (the place, how it ends, its days, switched on or off).
+    public static func restartsVisit(from old: RulePlan, to new: RulePlan) -> Bool {
+        old.kind != new.kind || old.places != new.places || old.untilLeave != new.untilLeave
+            || old.placeMinutes != new.placeMinutes || old.days != new.days || old.isOn != new.isOn
     }
 }
 
 // MARK: - What may change when
 
-public enum LockReason: String, Codable, Sendable { case running, reached, session, lockIn, onBreak }
+public enum LockReason: String, Codable, Sendable { case running, reached, session, lockIn, onBreak, atPlace }
 
 public enum EditAccess: Equatable, Sendable {
     /// Any change applies now.
@@ -264,6 +423,7 @@ public enum Policy {
         case .running(let u): lock = (u, .running)
         case .reached(let u): lock = (u, .reached)
         case .onBreak(let u): lock = (u, .onBreak)
+        case .atPlace(let latest): lock = (latest, .atPlace)      // until you leave (the message says so)
         default: break
         }
         if let l = lockInUntil, l > now, l > (lock?.0 ?? .distantPast) { lock = (l, .lockIn) }
@@ -287,8 +447,10 @@ public enum StrictHold {
     public static func until(_ plan: RulePlan, status: RuleStatus, now: Date, calendar: Calendar) -> Date? {
         guard plan.isOn, plan.strict else { return nil }
         switch (plan.kind, status) {
-        case (.schedule, .running(let end)):
+        case (.schedule, .running(let end)), (.place, .running(let end)):
             return end > now ? end : nil
+        case (.place, .atPlace(let latest)):
+            return latest > now ? latest : nil      // until you leave: cleared when this visit's block ends
         case (.limit, .counting), (.limit, .reached), (.timeout, .counting):
             return Period.end(after: now, resetAt: plan.resetAt, calendar: calendar)
         case (.timeout, .onBreak(let end)):
@@ -331,6 +493,9 @@ public enum Change {
                 // a window that covers the old one is stricter; anything else frees some time
                 if covers(new, old) { stricter = true } else { looser = true }
             }
+        case .place:
+            // another place, circle or ending can free time somewhere: never counted as stricter
+            if new.places != old.places || new.untilLeave != old.untilLeave || new.placeMinutes != old.placeMinutes { looser = true }
         }
         if looser { return .looser }
         return stricter ? .stricter : .same
@@ -350,12 +515,13 @@ public enum Change {
 
 public enum PlanProblem: Equatable, Sendable {
     case noName, nothingChosen, noDays, windowTooShort, windowTooLong, limitOutOfRange, tooManyApps, tooManyDomains, badDomain(String)
+    case noPlace, tooManyPlaces
 }
 
 public enum Validate {
     public static func problems(_ plan: RulePlan, appCount: Int, hasSelection: Bool, webTokenCount: Int = 0) -> [PlanProblem] {
         var out: [PlanProblem] = []
-        if plan.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append(.noName) }
+        // a name is optional: without one, the app shows the block by its first app (see BlockName)
         if !hasSelection && (plan.kind.countsUse || plan.domains.isEmpty) { out.append(.nothingChosen) }
         if plan.days.isEmpty { out.append(.noDays) }
         switch plan.kind {
@@ -369,6 +535,11 @@ public enum Validate {
             if !Limits.timeoutUseMinutes.contains(plan.limitMinutes) || !Limits.breakMinutes.contains(plan.breakMinutes) {
                 out.append(.limitOutOfRange)
             }
+        case .place:
+            if plan.places.isEmpty { out.append(.noPlace) }
+            if plan.places.contains(where: { !Limits.placeRadius.contains($0.radius) }) { out.append(.limitOutOfRange) }
+            if plan.places.count > Limits.maxPlaces { out.append(.tooManyPlaces) }
+            if !plan.untilLeave && !Limits.placeMinutes.contains(plan.placeMinutes) { out.append(.limitOutOfRange) }
         }
         // iOS silently shields nothing when a set holds more than 50 tokens
         if appCount > Limits.maxApps { out.append(.tooManyApps) }
