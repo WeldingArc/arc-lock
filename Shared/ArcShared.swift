@@ -50,16 +50,19 @@ struct ArcState: Codable, Equatable {
     var lastSessionMinutes = 60
     var headsUp = true
     var onboarded = false
-    /// No app (Arc Lock included) can be deleted while this is on. On by default; switching it off waits for midnight.
+    /// No app (Arc Lock included) can be deleted while this is on. On by default; switching it off waits until the
+    /// strict blocks running or counting then have reset or ended (`deletionProtectionOffAt`).
     var deletionProtection = true
     var deletionProtectionOffAt: Date?
-    /// Strict lock (global): blocks marked Strict lock can't be stopped or loosened while they run.
-    /// On by default; switching it off waits for midnight.
+    /// Strict lock (global): blocks marked Strict lock can't be stopped or loosened while they run. On by default.
+    /// Switching it off applies at once; see `strictUntil`.
     var strictLock = true
+    /// Saved by older versions: a switch-off that was waiting for midnight. Housekeeping applies it the new way
+    /// (see `strictUntil`).
     var strictLockOffAt: Date?
-    /// When Strict lock last switched off: strict daily limits and time-outs keep their lock until their own next
-    /// reset after that moment (switching off never frees one mid-period).
-    var strictOffSince: Date?
+    /// After Strict lock was switched off: the blocks that keep it (rule or Block-now id → until when). Each one that
+    /// was running or counting keeps its lock until its own reset, or until its run ends (StrictHold).
+    var strictUntil: [String: Date] = [:]
     /// Rule id → store slot. iOS allows an app 50 named stores in total, so rules reuse a fixed pool of slots.
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
@@ -67,25 +70,62 @@ struct ArcState: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
-        case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt, strictOffSince
+        case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt, strictUntil
     }
 
     init() {}
 
     func slot(of id: UUID) -> Int? { slots[id.uuidString] }
 
-    /// A lock-in makes everything strict; otherwise a block is strict when it and the global switch both are.
-    func isStrict(_ plan: RulePlan, now: Date = Date()) -> Bool {
+    /// A lock-in makes everything strict. Otherwise a block is strict when it's set to Strict lock and the global
+    /// switch is on — or the switch went off while it was running or counting, until that run or period is over.
+    func isStrict(_ rule: Rule, now: Date = Date()) -> Bool { isStrict(rule.plan, id: rule.id, now: now) }
+    func isStrict(_ plan: RulePlan, id: UUID, now: Date = Date()) -> Bool {
         if Policy.lockInActive(lockInUntil, now: now) { return true }
-        if strictLock { return plan.strict }
-        // switched off: a strict limit or time-out keeps its lock until its own next reset after the switch-off
-        if plan.strict, plan.kind.countsUse, let since = strictOffSince {
-            return now < Period.end(after: since.addingTimeInterval(-1), resetAt: plan.resetAt, calendar: .autoupdatingCurrent)
-        }
-        return false
+        guard plan.strict else { return false }
+        return strictLock || (strictUntil[id.uuidString] ?? .distantPast) > now
     }
     func isStrict(_ session: FocusSession, now: Date = Date()) -> Bool {
-        Policy.lockInActive(lockInUntil, now: now) || (strictLock && session.strict)
+        if Policy.lockInActive(lockInUntil, now: now) { return true }
+        guard session.strict else { return false }
+        return strictLock || (strictUntil[session.id.uuidString] ?? .distantPast) > now
+    }
+
+    /// Turns Strict lock off now. Each strict block that is running or counting keeps its lock until its own reset,
+    /// or until its run ends; a strict Block now until it ends. `status` = each block's status at `now`.
+    mutating func switchStrictOff(now: Date, calendar: Calendar, status: (Rule) -> RuleStatus) {
+        if strictLock {
+            var holds: [String: Date] = [:]
+            for r in rules {
+                if let until = StrictHold.until(r.plan, status: status(r), now: now, calendar: calendar) { holds[r.id.uuidString] = until }
+            }
+            if let s = session, s.strict, s.endsAt > now { holds[s.id.uuidString] = s.endsAt }
+            strictUntil = holds
+        }
+        strictLock = false
+        strictLockOffAt = nil
+        strictUntil = strictUntil.filter { $0.value > now }
+    }
+
+    /// A break that starts while its time-out still keeps Strict lock (switched off, waiting for its reset) is a
+    /// strict run too: it keeps the lock until the break ends, even past the reset. Returns whether the hold moved.
+    mutating func holdThroughBreak(_ id: UUID, until end: Date, now: Date) -> Bool {
+        guard !strictLock, let held = strictUntil[id.uuidString], held > now, held < end else { return false }
+        strictUntil[id.uuidString] = end
+        return true
+    }
+
+    /// When every strict block that is running or counting now has reset or ended (each at its own time); nil when
+    /// none is. Switching deletion protection off waits for this.
+    func strictHoldsEnd(now: Date, calendar: Calendar, status: (Rule) -> RuleStatus) -> Date? {
+        var ends: [Date] = []
+        for r in rules where r.plan.strict && isStrict(r, now: now) {
+            guard var until = StrictHold.until(r.plan, status: status(r), now: now, calendar: calendar) else { continue }
+            if !strictLock, let held = strictUntil[r.id.uuidString] { until = min(until, held) }
+            ends.append(until)
+        }
+        if let s = session, s.endsAt > now, isStrict(s, now: now) { ends.append(s.endsAt) }
+        return ends.max()
     }
 
     /// Gives every rule a slot (lowest free first) and frees slots of deleted rules.
@@ -114,7 +154,7 @@ struct ArcState: Codable, Equatable {
         deletionProtectionOffAt = try? c.decode(Date.self, forKey: .deletionProtectionOffAt)
         strictLock = (try? c.decode(Bool.self, forKey: .strictLock)) ?? true
         strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
-        strictOffSince = try? c.decode(Date.self, forKey: .strictOffSince)
+        strictUntil = (try? c.decode([String: Date].self, forKey: .strictUntil)) ?? [:]
     }
 }
 
@@ -208,7 +248,8 @@ enum Credits {
 }
 
 /// The day a limit's count was last restarted by an edit. iOS restarts its count on every such edit and the
-/// carried-over use is rounded down to a tenth, so only one restart a day is allowed; later ones wait for midnight.
+/// carried-over use is rounded down to a tenth, so only one restart a period is allowed; later ones wait for its
+/// next reset.
 enum Restarts {
     private static func key(_ id: UUID) -> String { "restart.\(id.uuidString)" }
     /// Whether the count was restarted since the block's last reset (`period` = Period.start).
@@ -276,7 +317,7 @@ enum Names {
     static let sessionStore = ManagedSettingsStore.Name("session")
     static let lockInStore = ManagedSettingsStore.Name("lockin")
     /// Keeps the clock automatic while any block is switched on, so it can't be set forward past a block or a
-    /// change waiting for midnight.
+    /// change waiting for its reset.
     static let clockStore = ManagedSettingsStore.Name("clock")
     /// Deletion protection (always-on, separate from blocks).
     static let guardStore = ManagedSettingsStore.Name("guard")

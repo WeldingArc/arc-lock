@@ -1,20 +1,24 @@
 <p align="center"><img src="docs/icon.png" width="128" alt="Arc Lock icon"></p>
 
 <h1 align="center">Arc Lock</h1>
-<p align="center"><b>Blocks you can't break.</b><br>
-A free, open-source app and website blocker for iPhone — schedules, daily limits, time-outs, and a lock you can't talk your way out of.</p>
+<p align="center">Companies fight for every second of your time to keep you distracted.<br>
+<b>Taking control of your screen time should be a human right,<br>not something locked behind a paywall.</b></p>
+
+<p align="center">So Arc Lock gives everyone the strict blocker other apps charge for. A free, open-source app and website blocker for iPhone — schedules, daily limits, time-outs, and a lock you can't talk your way out of.</p>
 
 <p align="center">Free · No account · No ads · No tracking · MIT licensed</p>
+
+<p align="center"><a href="https://apps.apple.com/app/arc-lock-app-blocker/id6822023409"><b>Get Arc Lock on the App Store</b></a></p>
 
 ---
 
 Most blockers keep their "hard mode" — the part that actually stops you — behind a subscription. Arc Lock gives it away. You choose the apps and websites, choose when they lock, and once a block with **Strict lock** is running **nothing in the app can stop it early, no app can be deleted, and the clock can't be set back.**
 
 <p align="center">
-  <img src="docs/screenshots/01-home.png" width="200" alt="Home: what is locked right now">
-  <img src="docs/screenshots/02-schedule.png" width="200" alt="A running schedule is read-only">
-  <img src="docs/screenshots/03-limit.png" width="200" alt="A daily limit">
-  <img src="docs/screenshots/04-block-now.png" width="200" alt="Block now">
+  <img src="docs/screenshots/1.1/01-home.png" width="200" alt="Home: what is locked right now">
+  <img src="docs/screenshots/1.1/02-running.png" width="200" alt="A running strict block is read-only">
+  <img src="docs/screenshots/1.1/03-blocks.png" width="200" alt="Blocks: schedules, daily limits and time-outs">
+  <img src="docs/screenshots/1.1/04-reset.png" width="200" alt="A time-out with its own reset time">
 </p>
 
 ## What it does
@@ -24,7 +28,7 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
 - **Time-outs** — not a full block, a pause: after a stretch of use (5 min – 4 h) the apps take a break (1 min – 2 h), then open again. Repeats all day, and starts fresh at its reset time.
 - **Block now** — lock something right away for 15 minutes to 12 hours.
 - **Websites by address** — type `youtube.com` and it's blocked in Safari, Chrome, Brave and every other browser — in schedules, daily limits, time-outs and Block now. (Websites picked in Apple's picker are counted and blocked in Safari, and counted in browsers that share their pages with Screen Time — in Brave, turn on *Settings › Shields & Privacy › Enable Screen Time*.)
-- **Native and in reach** — Apple's own lists and Liquid Glass tab bar (Home · Blocks · Settings), with **Block now** in a glass bar just above the tabs.
+- **Native and in reach** — Apple's own lists and compact Liquid Glass tab bar (Home · Blocks · Settings), with **Block now** as a small glass button floating just above it.
 - **Themes and app icons** — five looks (Navy, Graphite, Forest, Plum, Paper), each with a matching app icon. The phone-and-lock mark in the app closes while something is blocked and opens when nothing is.
 - **Strict lock** — on by default, and set per block. While a strict block runs:
   - it can't be edited, stopped or deleted in Arc Lock,
@@ -32,9 +36,9 @@ Most blockers keep their "hard mode" — the part that actually stops you — be
   - the date and time can't be changed by hand (they stay automatic as long as any strict block is switched on),
   - the block screen has exactly one button: **Close**.
 
-  A block without Strict lock can be stopped or changed any time. Strict lock can also be switched off for the whole app in Settings; that only takes effect at midnight.
-- **Daily limits and time-outs are locked in for the day** — you can make one stricter once a day (what you've already used today keeps counting); more time, a shorter break, fewer apps, deleting it or a second change only take effect at midnight.
-- **Deletion protection** — on by default: no app can be deleted from the iPhone, Arc Lock included. Switching it off only takes effect at midnight.
+  A block without Strict lock can be stopped or changed any time. Strict lock can also be switched off for the whole app in Settings. That works right away, but it never frees a block early: one that's running or counting stays strict until its own reset, or until it ends.
+- **Daily limits and time-outs are locked in until they reset** — you can make one stricter once a day (what you've already used keeps counting); more time, a shorter break, fewer apps, deleting it or a second change only take effect at its next reset (midnight, or the time you picked).
+- **Deletion protection** — on by default: no app can be deleted from the iPhone, Arc Lock included. Switching it off waits until the strict blocks running or counting at that moment have reset or ended (right away if there are none).
 - **Lock-in** — freeze every rule for 1–30 days, even between blocks. No loosening, no deleting rules, no deleting apps — and changes you queued before it wait until it's over. No early exit.
 
 ## How it works
@@ -45,14 +49,14 @@ Arc Lock is built entirely on Apple's **Screen Time API** — three frameworks t
 |---|---|
 | **FamilyControls** | Asking for permission (`AuthorizationCenter.requestAuthorization(for: .individual)` — Face ID, no account) and the system app picker. The picker returns **opaque tokens**: Arc Lock can show an app's icon and name but can never read *which* apps you chose. |
 | **ManagedSettings** | The actual locking: `shield` covers apps and websites with the block screen; `webContent.blockedByFilter` blocks typed web addresses in every browser; `application.denyAppRemoval` stops app deletion; `dateAndTime.requireAutomaticDateAndTime` stops clock tricks. |
-| **DeviceActivity** | Waking Arc Lock up in the background: when a schedule starts or ends, when a limit's usage passes a threshold, when a break ends, and at midnight — even if Arc Lock hasn't been opened for days. Its `DeviceActivityReport` extension draws the minutes used today inside the app. |
+| **DeviceActivity** | Waking Arc Lock up in the background: when a schedule starts or ends, when a limit's usage passes a threshold, when a break ends, and at each block's reset — even if Arc Lock hasn't been opened for days. Its `DeviceActivityReport` extension draws the minutes used today inside the app. |
 
 ```mermaid
 flowchart TD
     You(["You"]) -->|"create a block"| App["Arc Lock app<br/>(lock policy)"]
     App -->|"saves rules"| Store[("Shared storage<br/>on this iPhone")]
     App -->|"asks iOS to watch<br/>times and usage"| DA["iOS DeviceActivity"]
-    DA -->|"block starts · ends<br/>limit reached · break over · midnight"| Mon["Monitor extension<br/>(runs in the background)"]
+    DA -->|"block starts · ends<br/>limit reached · break over · reset"| Mon["Monitor extension<br/>(runs in the background)"]
     Store <--> Mon
     Mon -->|"apply / lift"| MS[("ManagedSettings<br/>one store per block")]
     App -->|"re-checks on open"| MS
@@ -78,7 +82,7 @@ Each rule writes to its **own named `ManagedSettingsStore`**. iOS combines all s
 
 iOS allows an app 20 monitored activities and 50 named stores, so Arc Lock keeps up to 18 blocks (a time-out needs two activities: its usage and its break) and gives each one a slot from a fixed pool (`slot.0`…`slot.17`, plus `session`, `lockin` and `clock`) that is reused after a block is deleted. A shield set with more than 50 items silently blocks nothing, so each block takes at most 49 apps and 49 picked websites (whole categories have no limit).
 
-The `clock` store keeps the date and time automatic whenever any strict block is switched on, so the clock can't be moved past a block — or past a change that's waiting for midnight.
+The `clock` store keeps the date and time automatic whenever any strict block is switched on, so the clock can't be moved past a block — or past a change that's waiting for its reset.
 
 ### Rules are the source of truth
 
@@ -92,7 +96,7 @@ All of it lives in [`Core/ArcCore.swift`](Core/ArcCore.swift) — plain Swift wi
 |---|---|
 | a **running** schedule, a **used-up** limit, a time-out **on a break**, or a **Block now** session — with Strict lock | look, not touch — until it ends |
 | a **daily limit or time-out counting** — with Strict lock | make it stricter now, once per reset (the use so far keeps counting); anything else — more time, a shorter break, fewer apps or days, a new reset time, deleting, a second change — waits for its next reset |
-| any block **without Strict lock** (or with Strict lock switched off in Settings) | change it, stop it or delete it any time |
+| any block **without Strict lock** (or with Strict lock switched off in Settings — a block that was running or counting then stays strict until its own reset, or until it ends) | change it, stop it or delete it any time |
 | anything during a **lock-in** | add new blocks; existing ones are frozen, strict or not, and changes queued earlier wait until it ends |
 | a schedule **between windows** | change anything — a schedule lasts at most 22 hours, and all schedules together must leave a free hour every day, so there's always such a time (and Arc Lock can always be opened, even if a block includes it) |
 

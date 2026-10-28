@@ -10,9 +10,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = lambda w, size: ImageFont.truetype(os.path.join(ROOT, "App", "Fonts", f"Pretendard-{w}.otf"), size)
 
 SHOTS = [
-    ("home", "Blocks that hold.", "Schedules, daily limits and time-outs\nfor apps and websites."),
-    ("timeout", "Take a breather.", "After a stretch of use, a short break.\nThen the apps open again."),
-    ("limits", "Limits that stick.", "See the minutes left today.\nUsed up means locked until midnight."),
+    # No price words anywhere in screenshots (App Review 2.3.7): the "paywall" half of the slogan lives in the
+    # description and the README only.
+    ("home", "Focus is a human right.", "Schedules, daily limits and time-outs\nfor apps and websites. Nothing held back."),
+    ("timeout", "Take a breather.", "After a stretch of use, a short break.\nIt starts over at the time you pick."),
+    ("limits", "Limits that stick.", "See the minutes left. Used up means\nlocked until the limit resets."),
     ("editor", "No early exit.", "With Strict lock, a running block\ncan't be stopped or deleted."),
     ("appearance", "Make it yours.", "Five themes, each with\na matching app icon."),
     ("lockin", "Lock in for days.", "Freeze every rule. No loosening,\nno deleting apps."),
@@ -47,7 +49,10 @@ def centered(d, y, text, font, fill, spacing):
 def compose(raw, title, sub):
     img = background()
     d = ImageDraw.Draw(img)
-    y = centered(d, 210, title, FONT("Light", 104), INK, 0)
+    size = 104
+    while d.textlength(title, font=FONT("Light", size)) > W - 140:
+        size -= 2
+    y = centered(d, 210 + (104 - size) // 2, title, FONT("Light", size), INK, 0)
     centered(d, y + 42, sub, FONT("Regular", 46), MUTED, 18)
 
     shot = Image.open(raw).convert("RGB")

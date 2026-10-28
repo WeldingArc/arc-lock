@@ -251,8 +251,9 @@ public enum EditAccess: Equatable, Sendable {
 }
 
 public enum Policy {
-    /// `strict` = this block's Strict lock and the global Strict lock are both on. A lock-in freezes every block,
-    /// strict or not; otherwise a block that isn't strict can always be changed, stopped or deleted.
+    /// `strict` = the block is strict right now: its own Strict lock with the global one on, or still held after the
+    /// global one went off (see StrictHold). A lock-in freezes every block, strict or not; otherwise a block that
+    /// isn't strict can always be changed, stopped or deleted.
     /// `nextReset` = when a counting limit or time-out starts over (default: the next midnight).
     public static func access(status: RuleStatus, lockInUntil: Date?, strict: Bool = true, now: Date,
                               calendar: Calendar, nextReset: Date? = nil) -> EditAccess {
@@ -274,6 +275,28 @@ public enum Policy {
     }
 
     public static func lockInActive(_ until: Date?, now: Date) -> Bool { (until ?? .distantPast) > now }
+}
+
+/// Turning Strict lock off applies at once, block by block: a strict block keeps its lock only until its own reset,
+/// or until its run ends — never until some shared midnight.
+public enum StrictHold {
+    /// Until when a block set to Strict lock stays strict if Strict lock is turned off at `now`: a running schedule
+    /// until its window ends; a daily limit or time-out that counts this period until its next reset (a break that
+    /// runs past the reset, until the break ends). Nil when nothing holds it: switched off, between windows, a day it
+    /// doesn't count, or stopped by hand — the same blocks that can be changed freely while Strict lock is on.
+    public static func until(_ plan: RulePlan, status: RuleStatus, now: Date, calendar: Calendar) -> Date? {
+        guard plan.isOn, plan.strict else { return nil }
+        switch (plan.kind, status) {
+        case (.schedule, .running(let end)):
+            return end > now ? end : nil
+        case (.limit, .counting), (.limit, .reached), (.timeout, .counting):
+            return Period.end(after: now, resetAt: plan.resetAt, calendar: calendar)
+        case (.timeout, .onBreak(let end)):
+            return max(end, Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
+        default:
+            return nil
+        }
+    }
 }
 
 public enum ChangeDirection: Equatable, Sendable { case same, stricter, looser }

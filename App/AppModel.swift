@@ -1,5 +1,5 @@
 // The app's view of the shared state, plus every change the user can make — each one checked against the lock
-// policy first (Core/ArcCore.swift: running blocks are read-only, looser limits wait until midnight, lock-in
+// policy first (Core/ArcCore.swift: running blocks are read-only, looser limits wait for their own reset, lock-in
 // freezes everything).
 import Combine
 import DeviceActivity
@@ -118,13 +118,24 @@ final class AppModel: ObservableObject {
         return Marks.reachedAt(id)
     }
     func access(_ r: Rule) -> EditAccess {
-        Policy.access(status: status(r), lockInUntil: state.lockInUntil, strict: state.isStrict(r.plan, now: now), now: now, calendar: calendar,
+        Policy.access(status: status(r), lockInUntil: state.lockInUntil, strict: state.isStrict(r, now: now), now: now, calendar: calendar,
                       nextReset: r.plan.kind.countsUse ? nextReset(r.plan) : nil)
     }
     /// A running block (or break) that may be stopped by hand: not strict, or Strict lock is off in Settings.
     func canStop(_ r: Rule) -> Bool { status(r).isBlocking && access(r) == .free }
     var canStopSession: Bool { activeSession.map { !state.isStrict($0, now: now) } ?? false }
     var strictLockActive: Bool { state.strictLock }
+    /// With Strict lock off: until when this block keeps it (it was running or counting when Strict lock went off).
+    func strictHold(_ r: Rule) -> Date? {
+        guard !state.strictLock, r.plan.strict, let until = state.strictUntil[r.id.uuidString], until > now else { return nil }
+        return until
+    }
+    /// The blocks still keeping Strict lock after it was turned off, soonest first.
+    var heldRules: [Rule] {
+        state.rules.filter { strictHold($0) != nil }.sorted { (strictHold($0) ?? now) < (strictHold($1) ?? now) }
+    }
+    /// A Block now keeping Strict lock after it was turned off.
+    var sessionHeld: Bool { activeSession.map { !state.strictLock && state.isStrict($0, now: now) } ?? false }
     func usageLevel(_ r: Rule) -> Int {
         #if DEBUG
         if demo { return Demo.level(r.id) }
@@ -226,7 +237,7 @@ final class AppModel: ObservableObject {
         let ended = before.contains { $0 <= now }
         let due = state.rules.contains { r in r.pending.map { effectiveDate($0, plan: r.plan) <= now } ?? false }
         func newlyDue(_ d: Date?) -> Bool { d.map { $0 > previous && $0 <= now } ?? false }
-        let switchDue = newlyDue(state.deletionProtectionOffAt) || newlyDue(state.strictLockOffAt)
+        let switchDue = newlyDue(state.deletionProtectionOffAt) || state.strictUntil.values.contains(where: newlyDue)
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
@@ -268,7 +279,9 @@ final class AppModel: ObservableObject {
 
     // MARK: deletion protection
 
-    /// Switching on applies now; switching off waits for midnight (and for a lock-in to end), like any looser change.
+    /// Switching on applies now. Switching off applies now too, unless a block with Strict lock is running or
+    /// counting: then it waits until each such block has reset or ended (its own time, not midnight). Never during a
+    /// lock-in.
     func setDeletionProtection(_ on: Bool) -> Outcome {
         if !demo { now = Date() }
         if on {
@@ -278,31 +291,31 @@ final class AppModel: ObservableObject {
         if lockInActive, let until = state.lockInUntil {
             return .refused(Self.lockedMessage(until: until, reason: .lockIn, now: now))
         }
-        if !state.strictLock {
+        guard let at = state.strictHoldsEnd(now: now, calendar: calendar, status: { self.status($0) }), at > now else {
             commit { $0.deletionProtection = false; $0.deletionProtectionOffAt = nil }
             return .saved
         }
-        let at = ScheduleMath.startOfNextDay(after: now, calendar: calendar)
         commit { $0.deletionProtectionOffAt = at }
         return .scheduled(at)
     }
 
     // MARK: strict lock
 
-    /// The global Strict lock. On: blocks marked Strict lock can't be stopped or loosened while they run. Switching it
-    /// on applies now; switching it off waits for midnight (never during a lock-in).
+    /// The global Strict lock. On: blocks marked Strict lock can't be stopped or loosened while they run. Both ways
+    /// apply now; switching off keeps each strict block that is running or counting locked until its own reset, or
+    /// until its run ends (see `heldRules`). Never switched off during a lock-in.
     func setStrictLock(_ on: Bool) -> Outcome {
         if !demo { now = Date() }
         if on {
-            commit { $0.strictLock = true; $0.strictLockOffAt = nil; $0.strictOffSince = nil }
+            commit { $0.strictLock = true; $0.strictLockOffAt = nil; $0.strictUntil = [:] }
             return .saved
         }
         if lockInActive, let until = state.lockInUntil {
             return .refused(Self.lockedMessage(until: until, reason: .lockIn, now: now))
         }
-        let at = ScheduleMath.startOfNextDay(after: now, calendar: calendar)
-        commit { $0.strictLockOffAt = at }
-        return .scheduled(at)
+        let at = now
+        commit { $0.switchStrictOff(now: at, calendar: calendar, status: { self.status($0) }) }
+        return .saved
     }
 
     /// Stops a running block that isn't strict, until it would have ended (a schedule's window, a limit's day, a
@@ -349,7 +362,7 @@ final class AppModel: ObservableObject {
                 return .refused(String(localized: "Together your schedules would leave less than an hour a day free. Keep a free hour, so you can always open Arc Lock and change them."))
             }
         }
-        // a change waiting for midnight counts too, if it needs more of iOS's monitors than the running version
+        // a change waiting for its reset counts too, if it needs more of iOS's monitors than the running version
         let others = state.rules.filter { $0.id != id }.map { r -> RulePlan in
             guard let p = r.pending?.plan, Capacity.activities(for: [p]) > Capacity.activities(for: [r.plan]) else { return r.plan }
             return p
@@ -381,8 +394,8 @@ final class AppModel: ObservableObject {
             if restarts, !demo, case .stricterOnly(let from) = access(existing),
                plan.kind == .timeout || Restarts.happenedToday(id, period: periodStart(existing.plan), now: now) {
                 // A restart hands out time already used: a time-out can't carry its count over (iOS reports only the
-                // break threshold), and a second limit restart today would undo the first one's carry-over. Both wait
-                // for midnight.
+                // break threshold), and a second limit restart this period would undo the first one's carry-over.
+                // Both wait for the block's next reset.
                 commit { st in
                     guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
                     st.rules[i].pending = RuleChange(plan: plan, selection: selection, effectiveAt: from)
@@ -394,7 +407,7 @@ final class AppModel: ObservableObject {
                 Restarts.mark(id, now: now)
             }
             // a block that becomes strict runs again, even if it was stopped by hand
-            if !demo && state.isStrict(plan, now: now) && !state.isStrict(existing.plan, now: now) { Stops.clear(id) }
+            if !demo && state.isStrict(plan, id: id, now: now) && !state.isStrict(existing.plan, id: id, now: now) { Stops.clear(id) }
             if restarts && !demo && plan.kind == .limit {
                 var used = 0
                 if existing.plan.isOn && status(existing) == .counting {
@@ -491,7 +504,7 @@ final class AppModel: ObservableObject {
     /// Locks every rule and stops app deletion through the end of the day `days` days from today.
     func startLockIn(days: Int) -> Outcome {
         if !demo { now = Date() }
-        guard state.strictLock && state.strictLockOffAt == nil else {
+        guard state.strictLock else {
             return .refused(String(localized: "Lock-in needs Strict lock. Turn Strict lock on in Settings first."))
         }
         let end = calendar.date(byAdding: .day, value: days + 1, to: calendar.startOfDay(for: Date()))!

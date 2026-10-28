@@ -41,29 +41,38 @@ struct SettingsTab: View {
 
     private var strictSection: some View {
         Section {
-            Toggle("Strict lock", isOn: Binding(get: { model.state.strictLock && model.state.strictLockOffAt == nil },
+            Toggle("Strict lock", isOn: Binding(get: { model.state.strictLock },
                                                 set: { on in
                                                     switch model.setStrictLock(on) {
                                                     case .refused(let why): model.problem = why
-                                                    case .scheduled(let at): model.toast = String(localized: "Strict lock turns off at \(Fmt.moment(at, now: model.now)).")
-                                                    case .saved: break
+                                                    case .saved, .scheduled:
+                                                        if !on, !model.heldRules.isEmpty || model.sessionHeld {
+                                                            model.toast = String(localized: "Strict lock is off. Blocks running now stay strict until they reset or end.")
+                                                        }
                                                     }
                                                 }))
-            if model.state.strictLock, let off = model.state.strictLockOffAt {
-                let at = model.lockInActive ? max(off, model.state.lockInUntil ?? off) : off
-                HStack {
-                    Text(at <= model.now ? String(localized: "Turns off when the strict blocks running now end")
-                                         : String(localized: "Turns off at \(Fmt.moment(at, now: model.now))"))
-                        .foregroundStyle(Palette.brass)
-                    Spacer()
-                    Button("Keep it on") { _ = model.setStrictLock(true) }.buttonStyle(.borderless)
+            ForEach(model.heldRules) { rule in
+                if let until = model.strictHold(rule) {
+                    LabeledContent {
+                        Text("Strict until \(Fmt.moment(until, now: model.now))").foregroundStyle(Palette.brass)
+                    } label: {
+                        Label(rule.plan.name, systemImage: "lock")
+                    }
+                    .font(.p(15, .regular, .subheadline))
+                }
+            }
+            if let s = model.activeSession, model.sessionHeld {
+                LabeledContent {
+                    Text("Strict until \(Fmt.moment(s.endsAt, now: model.now))").foregroundStyle(Palette.brass)
+                } label: {
+                    Label("Block now", systemImage: "lock")
                 }
                 .font(.p(15, .regular, .subheadline))
             }
         } footer: {
             Text(model.state.strictLock
-                 ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off takes effect at midnight, after any strict block running then has ended."
-                 : "Off: blocks can be stopped or changed any time (a strict daily limit or time-out stays strict until its next reset). Lock-in needs it on.")
+                 ? "Blocks set to Strict lock can't be stopped, loosened or deleted while they run. Turning it off works right away; a block that's running or counting stays strict until its own reset, or until it ends."
+                 : "Off: blocks can be stopped or changed any time. A block that was running or counting when you turned it off stays strict until its own reset, or until it ends. Lock-in needs it on.")
         }
         .listRowBackground(Palette.card)
     }
@@ -88,8 +97,8 @@ struct SettingsTab: View {
                 .font(.p(15, .regular, .subheadline))
             }
         } footer: {
-            Text(model.state.strictLock
-                 ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off takes effect at midnight."
+            Text(model.state.strictLock || !model.heldRules.isEmpty || model.sessionHeld
+                 ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end."
                  : "No app can be deleted from this iPhone, Arc Lock included.")
         }
         .listRowBackground(Palette.card)
@@ -235,7 +244,7 @@ struct LockInSheet: View {
                             }
                         }
                         Text("Through \(Fmt.lastDay(endingAt: end))").font(.p(20, .light)).foregroundStyle(Palette.ink)
-                        if !model.state.strictLock || model.state.strictLockOffAt != nil {
+                        if !model.state.strictLock {
                             Text("Lock-in needs Strict lock. Turn it on in Settings first.")
                                 .font(.p(14, .regular)).foregroundStyle(Palette.rose).multilineTextAlignment(.center)
                         }

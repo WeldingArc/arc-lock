@@ -163,7 +163,8 @@ enum Monitoring {
             }
         }
 
-        // Housekeeping at midnight: pending changes, lock-in and Block-now endings even if the app stays closed.
+        // Housekeeping at midnight too (a lock-in ends then), even if the app stays closed. Each block's own reset
+        // is its monitor's interval start, so pending changes land on time without this.
         if !have.contains(Names.daily) {
             let daily = DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
                                                intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true)
@@ -263,7 +264,7 @@ enum Engine {
             }
             if skip.contains(rule.id) { continue }
             if isBlocking(rule, now: now, calendar: calendar) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name, hold: state.isStrict(rule.plan, now: now))
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name, hold: state.isStrict(rule, now: now))
             } else {
                 Shielding.clear(name)
             }
@@ -278,14 +279,19 @@ enum Engine {
         Shielding.setLockIn(lockIn)
         let strictSession = sessionOn && (state.session.map { state.isStrict($0, now: now) } ?? false)
         Shielding.holdClock(lockIn || strictSession
-                            || state.rules.contains { ($0.plan.isOn && state.isStrict($0.plan, now: now)) || $0.pending != nil })
+                            || state.rules.contains { ($0.plan.isOn && state.isStrict($0, now: now)) || $0.pending != nil })
         Shielding.guardDeletion(state.onboarded && state.deletionProtection)
+    }
+
+    /// A rule's status at `now`, from what the monitor recorded (use, breaks, stops).
+    static func status(_ rule: Rule, now: Date, calendar: Calendar = .current) -> RuleStatus {
+        Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), breakUntil: Breaks.until(rule.id),
+                  stoppedUntil: Stops.until(rule.id), calendar: calendar)
     }
 
     /// Whether a rule should shield at `now` (see `edge`).
     static func isBlocking(_ rule: Rule, now: Date, calendar: Calendar = .current) -> Bool {
-        let status = Status.of(rule.plan, now: now, reachedAt: Marks.reachedAt(rule.id), breakUntil: Breaks.until(rule.id),
-                               stoppedUntil: Stops.until(rule.id), calendar: calendar)
+        let status = Engine.status(rule, now: now, calendar: calendar)
         // A break can be as short as a minute, so no edge here: `finishBreaks` ends it (allowing for an early callback).
         if case .onBreak(let until) = status { return until > now }
         if let until = status.blockingUntil { return until.timeIntervalSince(now) > edge }
@@ -307,17 +313,19 @@ enum Engine {
             // before an ended lock-in is cleared, so the moment it ends can't apply one mid-period)
             let moved = Pending.holdForLockIn(&s.rules, lockInUntil: s.lockInUntil, calendar: .autoupdatingCurrent)
             if let l = s.lockInUntil, l <= now { s.lockInUntil = nil }
-            if let off = s.deletionProtectionOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now {
+            // the time the strict blocks needed (their own resets or ends); a callback a moment early still counts
+            if let off = s.deletionProtectionOffAt, off.timeIntervalSince(now) <= edge, (s.lockInUntil ?? .distantPast) <= now {
                 s.deletionProtection = false
                 s.deletionProtectionOffAt = nil
             }
-            // never under a running strict block or session: it waits until they end (a promise made when they started)
-            if let off = s.strictLockOffAt, off <= now, (s.lockInUntil ?? .distantPast) <= now, !strictRunning(s, now: now) {
-                s.strictLock = false
-                s.strictLockOffAt = nil
-                // the scheduled moment (midnight) when on time; the real moment when a running strict block delayed it
-                // (15 minutes of slack, so a late midnight callback still counts as midnight)
-                s.strictOffSince = max(off, now.addingTimeInterval(-15 * 60))
+            // a switch-off saved by an older version (it waited for midnight) applies the new way: each strict block
+            // keeps its lock until its own reset or the end of its run
+            if s.strictLock, s.strictLockOffAt != nil, (s.lockInUntil ?? .distantPast) <= now {
+                s.switchStrictOff(now: now, calendar: .autoupdatingCurrent) { Engine.status($0, now: now, calendar: .autoupdatingCurrent) }
+            }
+            // a hold ending this close counts as over (see `edge`), so a callback a moment early still frees the clock
+            if s.strictUntil.contains(where: { $0.value.timeIntervalSince(now) <= edge }) {
+                s.strictUntil = s.strictUntil.filter { $0.value.timeIntervalSince(now) > edge }
             }
             if let sess = s.session, sess.endsAt <= now { s.session = nil }
             return (Pending.applyDue(&s.rules, now: now, frozenUntil: s.lockInUntil), moved)
@@ -325,7 +333,8 @@ enum Engine {
         var probe = st
         let (due, moved) = tidy(&probe)
         guard !due.isEmpty || moved || probe.session != st.session || probe.lockInUntil != st.lockInUntil
-              || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock else { return (st, false) }
+              || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock
+              || probe.strictUntil != st.strictUntil else { return (st, false) }
         st = StateStore.update { fresh in
             let (ids, _) = tidy(&fresh)
             for id in ids {
@@ -343,12 +352,6 @@ enum Engine {
             fresh.assignSlots()
         }
         return (st, true)
-    }
-
-    /// Whether a block or Block-now session with Strict lock is blocking at `now`.
-    static func strictRunning(_ s: ArcState, now: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
-        if let sess = s.session, sess.endsAt.timeIntervalSince(now) > edge, s.isStrict(sess, now: now) { return true }
-        return s.rules.contains { $0.plan.isOn && s.isStrict($0.plan, now: now) && isBlocking($0, now: now, calendar: calendar) }
     }
 
     /// Whether `now` falls in a period (day, from the block's reset time) this limit or time-out counts.

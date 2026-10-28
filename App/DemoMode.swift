@@ -47,7 +47,7 @@ enum Demo {
             Rule(id: games, plan: RulePlan(name: "Games", kind: .limit, days: [2, 3, 4, 5, 6], limitMinutes: 45),
                  selection: FamilyActivitySelection()),
             Rule(id: shorts, plan: RulePlan(name: "Shorts", kind: .timeout, days: Set(1...7), limitMinutes: 20,
-                                            breakMinutes: 10, strict: false),
+                                            breakMinutes: 10, strict: false, resetAt: TimeOfDay(4, 0)),
                  selection: FamilyActivitySelection()),
         ]
         if shot == "session" {

@@ -1,4 +1,5 @@
-// Runs in the background when a schedule starts or ends, when a daily limit passes a threshold, and at midnight.
+// Runs in the background when a schedule starts or ends, when a daily limit passes a threshold, at each block's
+// reset, and at midnight.
 // It applies and lifts the shields even while Arc Lock itself is closed.
 import DeviceActivity
 import Foundation
@@ -27,7 +28,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
             skip.insert(id)
         }
         // A time-out's break is over: lift it and start counting toward the next one. Then look again at what was
-        // waiting for it to end (Strict lock switching off never happens under a running strict break).
+        // waiting for it to end (deletion protection may switch off once a strict break is over).
         if Monitoring.finishBreaks(state, slack: Names.breakRuleID(activity) != nil ? Engine.edge : 0) {
             let (fresh, changed) = Engine.housekeep()
             if changed { Monitoring.sync(fresh) }
@@ -74,6 +75,12 @@ final class ActivityMonitor: DeviceActivityMonitor {
             Diag.log("  → break for \(rule.plan.breakMinutes) min")
             Monitoring.startBreak(rule, now: now)
             let back = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
+            // Strict lock is off but this time-out still keeps it until its reset: a break that starts now runs to
+            // its end, strict, even past the reset
+            let current = StateStore.load()
+            if !current.strictLock, let held = current.strictUntil[id.uuidString], held > now, held < back {
+                _ = StateStore.update { _ = $0.holdThroughBreak(id, until: back, now: now) }
+            }
             Notify.post(id: "break.\(id)", title: rule.plan.name,
                         body: L("Time for a %@ break. Back at %@.", minutesLabel(rule.plan.breakMinutes), Fmt.time(back)))
             Engine.reconcile(StateStore.load(), now: now)
@@ -83,7 +90,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
         Marks.raise(id, to: tenth, now: now, period: Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: .current))
         if tenth >= 10 {
             if let store = Engine.store(for: id, in: state) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule.plan, now: now))
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule, now: now))
             }
             let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
             Notify.post(id: "reached.\(id)", title: rule.plan.name, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))

@@ -367,9 +367,13 @@ struct RuleEditor: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(plan.strict ? "While it runs, it can't be stopped, loosened or deleted." : "You can stop it or change it any time.")
                 if plan.strict && !model.state.strictLock {
-                    Text(plan.kind.countsUse ? "Strict lock is off in Settings, so this block can be stopped after its next reset."
-                                             : "Strict lock is off in Settings, so for now this block can be stopped.")
-                        .foregroundStyle(Palette.rose)
+                    if let rule = existing, let until = model.strictHold(rule) {
+                        Text("Strict lock is off in Settings. This block was active when you turned it off, so it stays strict until \(Fmt.moment(until, now: model.now)).")
+                            .foregroundStyle(Palette.rose)
+                    } else {
+                        Text("Strict lock is off in Settings, so for now this block can be stopped.")
+                            .foregroundStyle(Palette.rose)
+                    }
                 }
             }
         }

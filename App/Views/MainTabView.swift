@@ -112,7 +112,7 @@ struct SessionSheet: View {
                         }
                     } footer: {
                         Text(model.canStopSession ? "Strict lock is off for this Block now, so it can be stopped."
-                                                  : "Strict lock is on, so it can't be stopped. It ends on its own.")
+                                                  : "This Block now has Strict lock, so it can't be stopped. It ends on its own.")
                     }
                     .listRowBackground(Palette.card)
                 } else {

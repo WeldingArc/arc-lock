@@ -405,6 +405,38 @@ struct CoreTests {
         check(Pending.effectiveDate(date("2026-10-13 04:00", seoul), plan: late, lockInUntil: lockEnd, now: date("2026-10-12 12:00", seoul), calendar: seoul)
               == date("2026-10-14 04:00", seoul), "the app shows the real date")
 
+        // 1.1.0 (10): turning Strict lock off frees each block at its own time, never at a shared midnight
+        let monday3pm = date("2026-10-12 15:00", seoul)
+        let reset4 = date("2026-10-13 04:00", seoul)
+        check(StrictHold.until(late, status: .counting, now: monday3pm, calendar: seoul) == reset4,
+              "a counting limit stays strict until its own 4 AM reset")
+        check(StrictHold.until(late, status: .reached(until: reset4), now: monday3pm, calendar: seoul) == reset4, "…and a used-up one")
+        check(StrictHold.until(late, status: .counting, now: date("2026-10-13 02:00", seoul), calendar: seoul) == reset4,
+              "switched off at 2 AM: free at 4 AM the same night, not a day later")
+        let midnightLimit = RulePlan(name: "M", kind: .limit, limitMinutes: 30)
+        check(StrictHold.until(midnightLimit, status: .counting, now: monday3pm, calendar: seoul) == date("2026-10-13 00:00", seoul),
+              "a limit that resets at midnight: midnight")
+        check(StrictHold.until(work, status: .running(until: date("2026-10-12 17:00", seoul)), now: monday3pm, calendar: seoul)
+              == date("2026-10-12 17:00", seoul), "a running schedule stays strict until its window ends")
+        check(StrictHold.until(work, status: .waiting(next: date("2026-10-13 09:00", seoul)), now: date("2026-10-12 18:00", seoul), calendar: seoul) == nil,
+              "a schedule between windows is free at once")
+        check(StrictHold.until(late, status: .resting, now: date("2026-10-14 12:00", seoul), calendar: seoul) == nil,
+              "a limit on a day it doesn't count is free at once")
+        check(StrictHold.until(late, status: .stopped(until: reset4), now: monday3pm, calendar: seoul) == nil, "a block stopped by hand holds nothing")
+        var offLimit = late; offLimit.isOn = false
+        check(StrictHold.until(offLimit, status: .off, now: monday3pm, calendar: seoul) == nil, "a block that's switched off holds nothing")
+        var looseLimit = late; looseLimit.strict = false
+        check(StrictHold.until(looseLimit, status: .counting, now: monday3pm, calendar: seoul) == nil, "a block without Strict lock holds nothing")
+        let breaks = RulePlan(name: "Shorts", kind: .timeout, limitMinutes: 30, breakMinutes: 30, resetAt: four)
+        check(StrictHold.until(breaks, status: .counting, now: monday3pm, calendar: seoul) == reset4, "a counting time-out: until its reset")
+        check(StrictHold.until(breaks, status: .onBreak(until: date("2026-10-12 15:20", seoul)), now: monday3pm, calendar: seoul) == reset4,
+              "a time-out on a break: until its reset")
+        check(StrictHold.until(breaks, status: .onBreak(until: date("2026-10-13 04:20", seoul)), now: date("2026-10-13 03:55", seoul), calendar: seoul)
+              == date("2026-10-13 04:20", seoul), "a break that runs past the reset: until the break ends")
+        let sleepHours = RulePlan(name: "Sleep", kind: .schedule, start: TimeOfDay(22, 0), end: TimeOfDay(7, 0))
+        check(StrictHold.until(sleepHours, status: .running(until: date("2026-10-13 07:00", seoul)), now: date("2026-10-12 23:00", seoul), calendar: seoul)
+              == date("2026-10-13 07:00", seoul), "an overnight schedule: until 7 AM, past midnight")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }
