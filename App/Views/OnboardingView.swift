@@ -9,14 +9,27 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabView(selection: $page) {
-                welcome.tag(0)
-                how.tag(1)
-                access.tag(2)
-                notifications.tag(3)
+            // moves only with its buttons: a swipe could skip Screen Time access
+            ZStack {
+                Group {
+                    switch page {
+                    case 0: welcome
+                    case 1: how
+                    case 2: access
+                    default: notifications
+                    }
+                }
+                .id(page)
+                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                        removal: .move(edge: .leading).combined(with: .opacity)))
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.easeInOut, value: page)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .animation(.easeInOut(duration: 0.35), value: page)
+            // access granted (iOS's answer can arrive without the request ever returning, as on iPad): go on
+            .onChange(of: model.isAuthorized) { _, granted in
+                if granted && page == 2 { asking = false; page = 3 }
+            }
             #if DEBUG
             .onAppear {
                 if Demo.shot == "onboarding-access" { page = 2 }
@@ -38,13 +51,13 @@ struct OnboardingView: View {
     }
 
     private func screen<Content: View>(@ViewBuilder content: () -> Content, button: LocalizedStringKey,
-                                       secondary: LocalizedStringKey? = nil, action: @escaping () -> Void,
+                                       secondary: LocalizedStringKey? = nil, waits: Bool = false, action: @escaping () -> Void,
                                        secondaryAction: (() -> Void)? = nil) -> some View {
         VStack(spacing: 22) {
             Spacer(minLength: 20)
             content()
             Spacer(minLength: 20)
-            Button(button, action: action).buttonStyle(BrassButton()).disabled(asking)
+            Button(button, action: action).buttonStyle(BrassButton()).disabled(waits && asking)
             if let secondary, let secondaryAction {
                 Button(secondary, action: secondaryAction).font(.p(16, .regular)).foregroundStyle(Palette.muted).frame(minHeight: 44)
             }
@@ -93,17 +106,17 @@ struct OnboardingView: View {
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
             Text("Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.")
                 .font(.p(14, .regular)).foregroundStyle(Palette.faint)
-        }, button: "Continue", action: {
+        }, button: "Continue", waits: true, action: {
             asking = true
             Task {
-                // iOS answers within seconds on a real iPhone; never leave the button dead if it doesn't
-                try? await Task.sleep(for: .seconds(45))
+                // iOS answers within seconds; never leave the button dead if its answer doesn't come back
+                try? await Task.sleep(for: .seconds(12))
                 asking = false
             }
             Task {
                 let ok = await model.requestScreenTime()
                 asking = false
-                if ok { page = 3 }
+                if ok && page == 2 { page = 3 }
             }
         })
     }
@@ -115,10 +128,10 @@ struct OnboardingView: View {
             Text("A quiet notice before a block starts, a daily limit runs out, or a break begins.")
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
         }, button: "Continue", action: {
-            Task {
-                await model.requestNotifications()
-                model.finishOnboarding()
-            }
+            // iOS's prompt stays on screen while setup finishes: its answer is handled whenever it comes (on iPad it
+            // may never be reported back, which left setup waiting here — App Review 2.1, 1.1.0)
+            Task { await model.requestNotifications() }
+            model.finishOnboarding()
         })
     }
 }
