@@ -75,6 +75,12 @@ struct ArcState: Codable, Equatable {
 
     init() {}
 
+    /// Whether this state may be acted on (shields, monitors, housekeeping) or written back (Core: `SavedState`).
+    /// Before the first unlock after a restart iOS can't read the shared state and it loads as never set up; a real
+    /// one always is. (Being locked later doesn't matter: once unlocked after a restart, the shared state stays
+    /// readable while the iPhone is locked — unlike `UIApplication.isProtectedDataAvailable`, false whenever locked.)
+    var isSetUp: Bool { onboarded }
+
     func slot(of id: UUID) -> Int? { slots[id.uuidString] }
 
     /// A lock-in makes everything strict. Otherwise a block is strict when it's set to Strict lock and the global
@@ -188,6 +194,9 @@ struct Lossy<T: Decodable>: Decodable {
 
 enum StateStore {
     private static let key = "state.v1"
+    /// Whether a saved state is there to read: false on a fresh install, and before the first unlock after a restart
+    /// (every read of the shared data comes back empty then).
+    static var isSaved: Bool { AppGroup.defaults.object(forKey: key) != nil }
     static func load() -> ArcState {
         guard let data = AppGroup.defaults.data(forKey: key) else { return ArcState() }
         DecodeReport.droppedPending = 0
@@ -203,13 +212,24 @@ enum StateStore {
     static func save(_ state: ArcState) {
         if let data = try? JSONEncoder().encode(state) { AppGroup.defaults.set(data, forKey: key) }
     }
-    /// Read-modify-write on the freshest copy (the app and the monitor extension both write).
+    /// Read-modify-write on the freshest copy (the app and the monitor extension both write). A state that isn't set
+    /// up — what an unreadable one looks like before the first unlock after a restart — is never changed or written
+    /// back, except by the app setting itself up with the iPhone unlocked (`settingUp`).
     @discardableResult
-    static func update(_ change: (inout ArcState) -> Void) -> ArcState {
-        var s = load()
-        change(&s)
-        save(s)
-        return s
+    static func update(settingUp: @autoclosure () -> Bool = false, _ change: (inout ArcState) -> Void) -> ArcState {
+        SavedState.update(load: load, save: save, isSetUp: \.isSetUp, settingUp: settingUp(), change)
+    }
+    /// Whether a set-up state is saved, read from the file itself rather than through UserDefaults: a process that
+    /// read the shared data before the first unlock after a restart can keep getting it empty from UserDefaults even
+    /// after the unlock. True only when the file shows one; anything unreadable counts as not set up, so setting up
+    /// is never blocked for good. Read only — iOS owns and writes the file. Needs the iPhone unlocked since the restart.
+    static var setUpOnDisk: Bool {
+        guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id),
+              let file = try? Data(contentsOf: dir.appendingPathComponent("Library/Preferences/\(AppGroup.id).plist")),
+              let prefs = try? PropertyListSerialization.propertyList(from: file, format: nil) as? [String: Any],
+              let data = prefs[key] as? Data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return json[ArcState.CodingKeys.onboarded.stringValue] as? Bool == true
     }
 }
 

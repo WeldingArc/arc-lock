@@ -275,7 +275,10 @@ final class AppModel: ObservableObject {
 
     private func commit(_ change: (inout ArcState) -> Void) {
         if demo { change(&state); state.assignSlots(); return }
-        state = StateStore.update { st in
+        // setting up (onboarding) writes a state that isn't set up yet: only while the iPhone is unlocked, and only if no
+        // set-up state is saved on disk — a process that read the shared data before the first unlock after a restart
+        // can keep getting it empty after the unlock (shown as onboarding to someone with blocks), and would replace it
+        state = StateStore.update(settingUp: UIApplication.shared.isProtectedDataAvailable && !StateStore.setUpOnDisk) { st in
             change(&st)
             st.assignSlots()
         }

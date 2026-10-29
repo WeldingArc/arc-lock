@@ -536,6 +536,42 @@ struct CoreTests {
         var tooMany = twoSpots; tooMany.places = Array(repeating: library, count: 21)
         check(Validate.problems(tooMany, appCount: 1, hasSelection: true).contains(.tooManyPlaces), "iOS watches at most 20 places")
 
+        // Before the first unlock after a restart the shared data can't be read: the saved state loads as never set
+        // up. Nothing changes it or writes it back — only the app, setting itself up while unlocked, writes one that
+        // isn't set up.
+        struct Saved: Equatable { var setUp = false; var blocks: [String] = [] }
+        let real = Saved(setUp: true, blocks: ["Study", "Sleep"])
+        var disk: Saved? = real
+        var locked = true
+        var writes = 0, runs = 0
+        let load: () -> Saved = { locked ? Saved() : (disk ?? Saved()) }
+        let save: (Saved) -> Void = { disk = $0; writes += 1 }
+        var got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: false) { runs += 1; $0.blocks = [] }
+        check(writes == 0 && runs == 0 && disk == real && got == Saved(),
+              "before the first unlock: an extension changes and writes nothing; the saved blocks stay")
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: false) { runs += 1; $0.setUp = true }
+        check(writes == 0 && runs == 0 && disk == real, "…not even a change that would mark it set up")
+        locked = false
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: false) { runs += 1; $0.blocks.append("Gym") }
+        check(writes == 1 && runs == 1 && got.blocks == ["Study", "Sleep", "Gym"] && disk == got, "once unlocked: written as usual")
+        // a fresh install: nothing saved yet
+        disk = nil; writes = 0
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: false) { $0.blocks = ["x"] }
+        check(writes == 0 && disk == nil, "an extension never writes a state that isn't set up")
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: true) { $0.blocks = [] }
+        check(writes == 1 && disk == Saved(), "the app setting itself up may write before setup is done (e.g. heads-ups off)")
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: true) { $0.setUp = true }
+        check(writes == 2 && disk?.setUp == true && got.setUp, "finishing setup is saved")
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: false) { $0.blocks = ["Study"] }
+        check(writes == 3 && disk?.blocks == ["Study"], "after setup everything writes as usual")
+        // the app's "may I set up?" reads a file: it's only asked when the loaded state isn't set up
+        var asked = 0
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: { asked += 1; return false }()) { $0.blocks = [] }
+        check(asked == 0 && writes == 4, "a set-up state never asks")
+        disk = Saved()
+        got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: { asked += 1; return false }()) { $0.blocks = ["y"] }
+        check(asked == 1 && writes == 4 && disk == Saved(), "a state that isn't set up asks, and a no writes nothing")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

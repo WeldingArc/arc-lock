@@ -616,6 +616,28 @@ public enum DecodeReport {
     public static var droppedPending = 0
 }
 
+// MARK: - The saved state before the first unlock
+
+/// Before the first unlock after a restart iOS keeps the App Group's data locked: every read comes back empty, so the
+/// saved state loads as a fresh one — never set up, no blocks. Acting on that would lift every block and stop every
+/// monitor, and writing it back could replace the real state. A real state is always set up (blocks exist only after
+/// setup, and nothing un-sets it), so a state that isn't is never acted on (Shared: `ArcState.isSetUp`) and never
+/// written back — except by the app while it sets one up, with the iPhone unlocked.
+public enum SavedState {
+    /// Read-modify-write on the freshest copy. Changes and saves a state that is set up, or any state when
+    /// `settingUp` (only asked when the loaded state isn't set up); otherwise `change` isn't run, nothing is saved and
+    /// the state comes back as loaded.
+    @discardableResult
+    public static func update<S>(load: () -> S, save: (S) -> Void, isSetUp: (S) -> Bool, settingUp: @autoclosure () -> Bool,
+                                 _ change: (inout S) -> Void) -> S {
+        var s = load()
+        guard isSetUp(s) || settingUp() else { return s }
+        change(&s)
+        save(s)
+        return s
+    }
+}
+
 public enum Pending {
     /// A lock-in holds queued changes back. A daily limit's or time-out's change must still land on one of its own
     /// resets, or it would hand out a fresh count mid-period: while a lock-in is set (or has just ended), move such

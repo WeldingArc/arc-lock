@@ -52,9 +52,9 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     /// Whether a loaded state is real. Before the first unlock after a restart iOS can't read the shared state and it
-    /// looks empty (never set up); a real one is always onboarded, since place blocks exist only after setup. (Being
-    /// locked doesn't matter: once unlocked after a restart, the state stays readable while the iPhone is locked.)
-    private func readable(_ state: ArcState) -> Bool { state.onboarded }
+    /// looks empty (never set up); a real one is always set up, since place blocks exist only after setup (see
+    /// ArcState.isSetUp).
+    private func readable(_ state: ArcState) -> Bool { state.isSetUp }
 
     /// Called at launch — also when iOS relaunches the app in the background for a crossing, which it delivers to
     /// this delegate.

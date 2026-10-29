@@ -12,6 +12,9 @@ enum Diag {
     private static let dumpKey = "diag.monitors"
 
     static func log(_ line: @autoclosure () -> String) {
+        // nothing is written to the shared data while it can't be read (before the first unlock after a restart): a
+        // write then could replace what's saved
+        guard StateStore.isSaved else { return }
         var lines = AppGroup.defaults.stringArray(forKey: logKey) ?? []
         lines.append("\(stamp(Date())) \(line())")
         if lines.count > 400 { lines.removeFirst(lines.count - 400) }
@@ -20,6 +23,7 @@ enum Diag {
 
     /// The monitors iOS holds for Arc Lock right now: schedule, next interval and event thresholds.
     static func dumpMonitors() {
+        guard StateStore.isSaved else { return }          // see `log`
         let center = DeviceActivityCenter()
         var out: [String] = ["at \(stamp(Date()))"]
         for name in center.activities.sorted(by: { $0.rawValue < $1.rawValue }) {

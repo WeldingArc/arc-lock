@@ -144,6 +144,9 @@ enum Monitoring {
     /// unchanged. Returns problems worth showing.
     @discardableResult
     static func sync(_ state: ArcState, now: Date = Date(), force: Set<UUID> = []) -> [Error] {
+        // a state that isn't set up may be one that couldn't be read (ArcState.isSetUp): every monitor would look
+        // unwanted and be stopped
+        guard state.isSetUp else { return [] }
         let center = DeviceActivityCenter()
         var errors: [Error] = []
         var wanted: [DeviceActivityName: (Rule, Plan)] = [:]
@@ -298,6 +301,9 @@ enum Engine {
     /// Makes the shields match the rules at `now`. Idempotent; the app calls it whenever it opens, the monitor
     /// extension after every callback. The rules are the source of truth, so a missed callback heals at the next one.
     static func reconcile(_ state: ArcState, now: Date = Date(), calendar: Calendar = .current, skip: Set<UUID> = []) {
+        // a state that isn't set up may be one that couldn't be read (ArcState.isSetUp): clearing every store for it
+        // would lift every block, the lock-in and deletion protection. Everything stays as it is until a real read.
+        guard state.isSetUp else { return }
         for slot in 0..<Names.slotCount {
             let name = Names.store(slot: slot)
             guard let rule = state.rules.first(where: { state.slot(of: $0.id) == slot }) else {
@@ -352,6 +358,8 @@ enum Engine {
     @discardableResult
     static func housekeep(now: Date = Date()) -> (ArcState, Bool) {
         var st = StateStore.load()
+        // nothing to tidy in a state that isn't set up — and one that couldn't be read must not be written back
+        guard st.isSetUp else { return (st, false) }
         func tidy(_ s: inout ArcState) -> (Set<UUID>, Bool) {
             // a lock-in holds queued changes; a limit's or time-out's change still lands on its own reset (checked
             // before an ended lock-in is cleared, so the moment it ends can't apply one mid-period)
@@ -401,7 +409,7 @@ enum Engine {
             }
             fresh.assignSlots()
         }
-        return (st, true)
+        return (st, st.isSetUp)          // not set up: the fresh read failed and nothing was written
     }
 
     /// Whether `now` falls in a period (day, from the block's reset time) this limit or time-out counts.

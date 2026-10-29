@@ -1,6 +1,8 @@
 // Runs in the background when a schedule starts or ends, when a daily limit passes a threshold, at each block's
 // reset, and at midnight.
-// It applies and lifts the shields even while Arc Lock itself is closed.
+// It applies and lifts the shields even while Arc Lock itself is closed. Before the first unlock after a restart the
+// saved state can't be read (it loads as never set up, see ArcState.isSetUp): then every shield and monitor stays as
+// it is, and the next callback or opening Arc Lock catches up.
 import DeviceActivity
 import Foundation
 import ManagedSettings
@@ -10,6 +12,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
         super.intervalDidStart(for: activity)
         Diag.log("start \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
+        guard state.isSetUp else { return }
         // The daily monitor, and a block's own reset (its interval start), re-register limits whose thresholds were
         // only meant for the period that just ended.
         if activity == Names.daily || Names.ruleID(activity) != nil || changed { Monitoring.sync(state) }
@@ -21,6 +24,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
         super.intervalDidEnd(for: activity)
         Diag.log("end \(activity.rawValue)")
         var (state, _) = Engine.housekeep()
+        guard state.isSetUp else { return }
         var skip = Set<UUID>()
         if let id = Names.ruleID(activity), let rule = state.rules.first(where: { $0.id == id }), rule.plan.kind == .schedule {
             // The window is over — lift it now even if this callback came a moment early.
@@ -42,6 +46,8 @@ final class ActivityMonitor: DeviceActivityMonitor {
         super.eventDidReachThreshold(event, activity: activity)
         Diag.log("threshold \(event.rawValue) in \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
+        // an unreadable state has no rules: this block would look deleted and its monitor be stopped
+        guard state.isSetUp else { return }
         if changed { Monitoring.sync(state) }
         let now = Date()
         guard let id = Names.ruleID(activity) else { return }
