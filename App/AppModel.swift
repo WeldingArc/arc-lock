@@ -303,6 +303,17 @@ final class AppModel: ObservableObject {
         return isAuthorized
     }
 
+    /// Reads Screen Time access again. iOS's answer can arrive without the request ever returning or the status
+    /// publisher firing (as on iPad), so setup looks for it itself.
+    @discardableResult func recheckScreenTime() -> Bool {
+        if demo { return true }
+        let wasAuthorized = isAuthorized
+        auth = AuthorizationCenter.shared.authorizationStatus
+        if Self.granted(auth) { accessLost = false }
+        if !wasAuthorized && isAuthorized { refresh() }
+        return isAuthorized
+    }
+
     /// Shows iOS's notification request; a "Don't Allow" there switches heads-ups off (Settings can turn them on again).
     func requestNotifications() async {
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false

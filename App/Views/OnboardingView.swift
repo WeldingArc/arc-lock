@@ -4,6 +4,7 @@ import SwiftUI
 /// screen only explains and continues to iOS's own request, where the choice is made (App Review 5.1.1(iv)).
 struct OnboardingView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var page = 0
     @State private var asking = false
 
@@ -29,6 +30,10 @@ struct OnboardingView: View {
             // access granted (iOS's answer can arrive without the request ever returning, as on iPad): go on
             .onChange(of: model.isAuthorized) { _, granted in
                 if granted && page == 2 { asking = false; page = 3 }
+            }
+            // back from iOS's Screen Time sheet (or Settings): look again
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active && page == 2 && model.recheckScreenTime() { asking = false; page = 3 }
             }
             #if DEBUG
             .onAppear {
@@ -107,10 +112,17 @@ struct OnboardingView: View {
             Text("Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.")
                 .font(.p(14, .regular)).foregroundStyle(Palette.faint)
         }, button: "Continue", waits: true, action: {
+            // granted already (asked before): nothing to ask
+            if model.recheckScreenTime() { page = 3; return }
             asking = true
             Task {
-                // iOS answers within seconds; never leave the button dead if its answer doesn't come back
-                try? await Task.sleep(for: .seconds(12))
+                // iOS's answer can arrive without the request ever returning (as on iPad): look for it twice a second,
+                // and never leave the button dead for more than 12 s
+                for _ in 0..<24 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard page == 2 else { return }
+                    if model.recheckScreenTime() { asking = false; page = 3; return }
+                }
                 asking = false
             }
             Task {
