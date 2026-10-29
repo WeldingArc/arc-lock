@@ -437,7 +437,7 @@ struct CoreTests {
         check(StrictHold.until(sleepHours, status: .running(until: date("2026-10-13 07:00", seoul)), now: date("2026-10-12 23:00", seoul), calendar: seoul)
               == date("2026-10-13 07:00", seoul), "an overnight schedule: until 7 AM, past midnight")
 
-        // 1.2.0: place blocks
+        // 1.1.0: place blocks
         let library = PlaceSpot(latitude: 37.5665, longitude: 126.9780, radius: 150, name: "Library")
         let atLibrary = RulePlan(name: "Library", kind: .place, days: [2, 3, 4, 5, 6], places: [library], untilLeave: true)
         var timed = atLibrary; timed.untilLeave = false; timed.placeMinutes = 120

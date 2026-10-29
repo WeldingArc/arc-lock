@@ -80,7 +80,7 @@ public struct RulePlan: Codable, Hashable, Sendable {
         case name, kind, isOn, start, end, days, limitMinutes, domains, breakMinutes, strict, resetAt
         case places, untilLeave, placeMinutes
     }
-    /// Read only: an early 1.2 build kept a single place.
+    /// Read only: an early test build kept a single place.
     enum OlderKeys: String, CodingKey { case place }
 
     /// Fields added in later versions fall back to their defaults, so saved blocks always load.
