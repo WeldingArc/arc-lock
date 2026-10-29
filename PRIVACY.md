@@ -11,7 +11,7 @@ Everything stays on your iPhone, in Arc Lock's own storage (an App Group shared 
 - the blocks you create: their names, hours, days, daily limits, time-outs and the website addresses you type;
 - Apple's **opaque tokens** for the apps, categories and websites you pick. Arc Lock can't read which apps these tokens stand for — only iOS can show their names and icons;
 - for each daily limit, how far today's use has gone, in tenths (for example "over half used"), and for each time-out, when its current break ends. iOS tells Arc Lock when a threshold passes; it never tells Arc Lock how long you used which app;
-- for each place block (from version 1.2): the place you chose on the map (its coordinates, the size of the circle and the name you gave it), whether you're inside it as iOS last reported, and when the current block started and ends. Arc Lock keeps no record of where you go.
+- for each place block (from version 1.1): the place you chose on the map (its coordinates, the size of the circle and the name you gave it), whether you're inside it as iOS last reported, and when the current block started and ends. Arc Lock keeps no record of where you go.
 
 Deleting Arc Lock deletes all of it.
 
