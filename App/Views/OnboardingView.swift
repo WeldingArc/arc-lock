@@ -31,9 +31,11 @@ struct OnboardingView: View {
             .onChange(of: model.isAuthorized) { _, granted in
                 if granted && page == 2 { asking = false; page = 3 }
             }
-            // back from iOS's Screen Time sheet (or Settings): look again
+            // back from iOS's Screen Time sheet (or Settings): the button works again; go on if access was granted
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active && page == 2 && model.recheckScreenTime() { asking = false; page = 3 }
+                guard phase == .active, page == 2 else { return }
+                asking = false
+                if model.recheckScreenTime() { page = 3 } else { watchForAccess(seconds: 4) }
             }
             #if DEBUG
             .onAppear {
@@ -62,7 +64,13 @@ struct OnboardingView: View {
             Spacer(minLength: 20)
             content()
             Spacer(minLength: 20)
-            Button(button, action: action).buttonStyle(BrassButton()).disabled(waits && asking)
+            Button(action: action) {
+                // while iOS is asking, show that it's waiting (the button works again once iOS's sheet closes)
+                if waits && asking { ProgressView().tint(Palette.night) } else { Text(button) }
+            }
+            .buttonStyle(BrassButton())
+            .disabled(waits && asking)
+            .opacity(waits && asking ? 0.6 : 1)
             if let secondary, let secondaryAction {
                 Button(secondary, action: secondaryAction).font(.p(16, .regular)).foregroundStyle(Palette.muted).frame(minHeight: 44)
             }
@@ -115,14 +123,10 @@ struct OnboardingView: View {
             // granted already (asked before): nothing to ask
             if model.recheckScreenTime() { page = 3; return }
             asking = true
+            watchForAccess(seconds: 12)
             Task {
-                // iOS's answer can arrive without the request ever returning (as on iPad): look for it twice a second,
-                // and never leave the button dead for more than 12 s
-                for _ in 0..<24 {
-                    try? await Task.sleep(for: .milliseconds(500))
-                    guard page == 2 else { return }
-                    if model.recheckScreenTime() { asking = false; page = 3; return }
-                }
+                // never leave the button waiting for long, even if iOS's answer never comes back
+                try? await Task.sleep(for: .seconds(12))
                 asking = false
             }
             Task {
@@ -131,6 +135,18 @@ struct OnboardingView: View {
                 if ok && page == 2 { page = 3 }
             }
         })
+    }
+
+    /// Looks for Screen Time access twice a second for a while: iOS's answer can arrive without the request ever
+    /// returning (as on iPad).
+    private func watchForAccess(seconds: Int) {
+        Task {
+            for _ in 0..<(seconds * 2) {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard page == 2 else { return }
+                if model.recheckScreenTime() { asking = false; page = 3; return }
+            }
+        }
     }
 
     private var notifications: some View {
