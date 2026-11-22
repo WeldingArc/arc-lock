@@ -151,4 +151,4 @@ Shared/Themes.swift         the five themes (shared with the block screen and th
 
 [MIT](LICENSE). The bundled [Pretendard](https://github.com/orioncactus/pretendard) font is under the [SIL Open Font License](licenses/Pretendard-OFL.txt).
 
-Made by [WeldingArc](https://github.com/WeldingArc) — also behind [Arc Lecture Transcriber](https://github.com/WeldingArc/arc-lecture-transcriber).
+Made by [Jun Hyuk Choi](https://github.com/WeldingArc) — also behind [Arc Lecture Transcriber](https://github.com/WeldingArc/arc-lecture-transcriber).
