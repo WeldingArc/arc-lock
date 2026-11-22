@@ -361,6 +361,16 @@
         }
       }
     },
+    "A lock-in lasts 1 to 14 days.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙 고정 기간은 1~14일입니다."
+          }
+        }
+      }
+    },
     "A place block needs your location. Arc Lock watches only the places you choose, to start a block when you arrive and end it when you leave. Arc Lock never sends your location anywhere.": {
       "localizations": {
         "ko": {
@@ -443,6 +453,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ 사용하면 이 앱들이 %2$@ 동안 잠깁니다. 이후 다시 사용할 수 있고 사용 시간도 새로 계산됩니다. %3$@에 새 주기가 시작됩니다."
+          }
+        }
+      }
+    },
+    "After a restart, iOS hasn't handed Arc Lock your blocks yet. They're safe. Close Arc Lock in the app switcher, then open it again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone을 다시 시작한 뒤 iOS가 아직 Arc Lock에 차단 정보를 넘겨주지 않았습니다. 차단은 그대로 안전합니다. 앱 전환기에서 Arc Lock을 닫은 다음 다시 여세요."
           }
         }
       }
@@ -597,6 +617,26 @@
         }
       }
     },
+    "Arc Lock can't be deleted, and neither can any other app on this iPhone.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 삭제할 수 없으며, 이 iPhone의 다른 앱도 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Are you sure?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정말 규칙을 고정하시겠습니까?"
+          }
+        }
+      }
+    },
     "Ask a friend to hold a passcode": {
       "localizations": {
         "ko": {
@@ -614,6 +654,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@에 다시 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Background App Refresh is off, so place blocks can't start or end while Arc Lock is closed. You can turn it on in Settings › General › Background App Refresh.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "백그라운드 앱 새로 고침이 꺼져 있어 Arc Lock을 닫으면 장소 차단을 시작하거나 끝낼 수 없습니다. 설정 › 일반 › 백그라운드 앱 새로 고침에서 켤 수 있습니다."
           }
         }
       }
@@ -946,6 +996,16 @@
         }
       }
     },
+    "Close and reopen Arc Lock": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 닫았다가 다시 여세요"
+          }
+        }
+      }
+    },
     "Confirmation": {
       "localizations": {
         "ko": {
@@ -1066,6 +1126,16 @@
         }
       }
     },
+    "Double-tap and hold for %lld seconds.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "두 번 탭한 채 %lld초 동안 누르고 계세요."
+          }
+        }
+      }
+    },
     "Each day": {
       "localizations": {
         "ko": {
@@ -1116,6 +1186,16 @@
         }
       }
     },
+    "Every block stays exactly as it is, and blocks you stopped start again. None can be stopped, changed or deleted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모든 차단이 지금 그대로 유지되며, 직접 중지한 차단도 다시 작동합니다. 어떤 차단도 중지하거나 바꾸거나 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
     "Every day": {
       "localizations": {
         "ko": {
@@ -1156,12 +1236,12 @@
         }
       }
     },
-    "For the days you choose, every rule stays exactly as it is or gets stricter, and no app can be deleted. There is no early exit.": {
+    "For the days you choose, every rule stays exactly as it is, and no app can be deleted. There is no early exit.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선택한 기간에는 규칙을 그대로 두거나 더 제한적으로만 바꿀 수 있습니다. 앱도 삭제할 수 없으며, 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
+            "value": "선택한 기간에는 모든 규칙이 그대로 유지되며, 앱도 삭제할 수 없습니다. 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
           }
         }
       }
@@ -1266,12 +1346,32 @@
         }
       }
     },
+    "I am sure": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확실합니다"
+          }
+        }
+      }
+    },
     "In a real emergency your friend can always give you the code. That's the point: a pause long enough for the urge to pass.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "정말 급한 상황이라면 친구가 언제든 암호를 알려 줄 수 있습니다. 잠시 멈춰 하고 싶은 마음이 가라앉을 시간을 갖는 것이 목적입니다."
+          }
+        }
+      }
+    },
+    "It buzzes as it fills. One strong buzz means you're locked in.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼이 채워지는 동안 진동이 점점 강해집니다. 마지막에 강한 진동이 오면 규칙이 고정된 것입니다."
           }
         }
       }
@@ -1323,6 +1423,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "현재 시간이 포함되어 있어 지금 시작하며, %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Keep holding…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속 누르고 계세요…"
           }
         }
       }
@@ -1383,6 +1493,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "길이"
+          }
+        }
+      }
+    },
+    "Let go too soon. Hold it for the full %lld seconds.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "너무 일찍 손을 뗐습니다. %lld초 동안 끝까지 누르고 계세요."
           }
         }
       }
@@ -1507,6 +1627,16 @@
         }
       }
     },
+    "Lock-in starts as soon as you confirm and lasts through %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인하는 즉시 규칙 고정이 시작되어 %@까지 이어집니다."
+          }
+        }
+      }
+    },
     "Locked": {
       "localizations": {
         "ko": {
@@ -1524,6 +1654,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arc Lock에서 잠김"
+          }
+        }
+      }
+    },
+    "Locked in": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙이 고정되었습니다"
           }
         }
       }
@@ -1566,6 +1706,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "여기에 있는 동안 잠김"
+          }
+        }
+      }
+    },
+    "Low Power Mode is on, so place blocks can't start or end while Arc Lock is closed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저전력 모드가 켜져 있어 Arc Lock을 닫으면 장소 차단을 시작하거나 끝낼 수 없습니다."
           }
         }
       }
@@ -1760,6 +1910,16 @@
         }
       }
     },
+    "Notifications are off for Arc Lock, so heads-ups can't arrive. You can turn them on in Settings › Notifications › Arc Lock.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock의 알림이 꺼져 있어 사전 알림을 받을 수 없습니다. 설정 › 알림 › Arc Lock에서 켤 수 있습니다."
+          }
+        }
+      }
+    },
     "OK": {
       "localizations": {
         "ko": {
@@ -1937,6 +2097,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arc Lock의 정확한 위치가 꺼져 있어 iOS가 도착하거나 떠난 시점을 확인할 수 없습니다. 설정 › Arc Lock › 위치에서 변경할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Press and hold for %lld seconds.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld초 동안 길게 누르세요."
           }
         }
       }
@@ -2542,6 +2712,16 @@
         }
       }
     },
+    "There's no early exit. It ends on its own after %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "중간에 해제할 수 없습니다. %@까지 이어진 뒤 자동으로 끝납니다."
+          }
+        }
+      }
+    },
     "This Block now has Strict lock, so it can't be stopped. It ends on its own.": {
       "localizations": {
         "ko": {
@@ -2584,13 +2764,12 @@
         }
       }
     },
-    "This block ends when you leave.": {
-      "extractionState": "manual",
+    "This block ends when you leave. If you've left, open Arc Lock to refresh.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "장소를 떠나면 이 차단이 끝납니다."
+            "value": "장소를 떠나면 이 차단이 끝납니다. 이미 떠났다면 Arc Lock을 열어 상태를 새로 고치세요."
           }
         }
       }
@@ -2665,12 +2844,22 @@
         }
       }
     },
-    "This limit is locked in until it resets. One stricter change applies now; anything else — more time, fewer apps or days, the reset time, deleting, or a second change — starts at %@.": {
+    "This limit is locked in until it resets. More days apply now; any other change — the minutes, the apps, the reset time, deleting — starts at %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 한도는 초기화될 때까지 고정됩니다. 한 번은 더 제한적으로 바로 바꿀 수 있습니다. 그 밖의 변경(시간 늘리기, 앱이나 요일 줄이기, 초기화 시각 변경, 삭제, 두 번째 변경)은 %@부터 적용됩니다."
+            "value": "이 한도는 초기화될 때까지 고정됩니다. 요일을 추가하는 변경은 바로 적용됩니다. 그 밖의 변경(사용 시간, 앱, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "This limit is locked in until it resets. Stricter changes apply now; anything else — more time, fewer apps or days, the reset time, deleting — starts at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도는 초기화될 때까지 고정됩니다. 더 제한적인 변경은 바로 적용됩니다. 그 밖의 변경(시간 늘리기, 앱이나 요일 줄이기, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
           }
         }
       }
@@ -2703,6 +2892,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 한도를 모두 사용했습니다. %@에 잠금이 해제됩니다."
+          }
+        }
+      }
+    },
+    "This setting can't be changed: the lock-in can only be made longer, never shorter or turned off, and Strict lock stays on until it ends.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 설정은 바꿀 수 없습니다. 규칙 고정은 늘릴 수만 있고 줄이거나 끌 수 없으며, 끝날 때까지 강제 잠금이 켜져 있습니다."
           }
         }
       }
@@ -3039,12 +3238,12 @@
         }
       }
     },
-    "When the time is used up, these apps lock until %@. A new limit starts counting when you save it.": {
+    "When the time is used up, these apps lock until %@. Today's use so far counts too, so a limit that's already used up locks as soon as you save it.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용 시간을 다 쓰면 이 앱들이 %@까지 잠깁니다. 새 한도는 저장하는 순간부터 시간을 계산합니다."
+            "value": "사용 시간을 다 쓰면 이 앱들이 %@까지 잠깁니다. 오늘 이미 사용한 시간도 포함되므로, 이미 다 쓴 한도는 저장하는 즉시 잠깁니다."
           }
         }
       }
@@ -3089,6 +3288,16 @@
         }
       }
     },
+    "You can still add new blocks.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 차단은 추가할 수 있습니다."
+          }
+        }
+      }
+    },
     "You can stop it any time.": {
       "localizations": {
         "ko": {
@@ -3119,6 +3328,16 @@
         }
       }
     },
+    "You're locked in, so it can't be stopped.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙 고정 중이라 중지할 수 없습니다."
+          }
+        }
+      }
+    },
     "You're there now": {
       "localizations": {
         "ko": {
@@ -3145,6 +3364,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 동안"
+          }
+        }
+      }
+    },
+    "iOS couldn't watch this place, so this block can't start when you arrive. Arc Lock tries again each time you open it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS가 이 장소를 확인하지 못해 도착해도 이 차단이 시작되지 않습니다. Arc Lock을 열 때마다 다시 시도합니다."
           }
         }
       }

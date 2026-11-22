@@ -3,11 +3,11 @@
 import SwiftUI
 
 struct UsageSummary: Equatable {
-    /// Minutes counted today (for a daily limit: since `since`, plus time carried over by a change).
+    /// Minutes counted today (for a daily limit: since `since`, the same count that locks it).
     var minutes: Int
     /// The daily limit, when the block is one.
     var limit: Int?
-    /// When a daily limit started counting, if not at midnight (it was created or changed today).
+    /// When a daily limit started counting, if not at midnight (a reset time, or a reset time changed today).
     var since: Date?
 
     static func context(slot: Int) -> String { "slot.\(slot)" }

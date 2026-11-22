@@ -50,8 +50,8 @@ enum Shielding {
     }
 }
 
-/// What a rule's monitor was registered with. Compared with `==` (sets, not bytes), so an unchanged rule is never
-/// re-registered — re-registering restarts a limit's count.
+/// What a rule's monitor was registered with. Compared field by field (sets, not bytes), so an unchanged rule is never
+/// registered again — that would restart a time-out's count (a daily limit then counts its whole period again).
 struct Registration: Codable, Equatable {
     var kind: RuleKind
     var start: TimeOfDay
@@ -59,15 +59,30 @@ struct Registration: Codable, Equatable {
     var limit: Int
     /// Event name → minutes after the count starts.
     var thresholds: [String: Int]
-    /// The day a credit was applied (thresholds are only valid that day).
+    /// The day a credit was applied (thresholds were only valid that day). Versions before 1.1.1 carried use over
+    /// this way; now always nil.
     var creditDay: Date?
     var selection: FamilyActivitySelection
+    /// true = the events count use from before the monitor was registered (daily limits: the whole period). nil in
+    /// registrations saved before 1.1.1, which count from the registration only.
+    var pastActivity: Bool? = nil
+
+    /// Whether this registration serves `wanted`: the same rule, thresholds and apps. How it counts (`pastActivity`)
+    /// only matters in the period it was registered in — from every later reset on, any registration counts the whole
+    /// period (`countingSince` agrees). So a monitor is never registered again for that alone: not on the update from
+    /// 1.1.0 (its limits count whole periods from their next reset), not when a fresh count ends. Such a re-registration
+    /// would come at the first use after the reset, and restart the count with hours the clock check can't rule out.
+    func serves(_ wanted: Registration) -> Bool {
+        var mine = self
+        mine.pastActivity = wanted.pastActivity
+        return mine == wanted
+    }
 }
 
 enum Monitoring {
     struct Plan { let schedule: DeviceActivitySchedule; let events: [DeviceActivityEvent.Name: DeviceActivityEvent]; let registration: Registration }
 
-    static func plan(for rule: Rule, now: Date = Date(), calendar: Calendar = .current) -> Plan {
+    static func plan(for rule: Rule, now: Date = Date()) -> Plan {
         let p = rule.plan
         switch p.kind {
         case .schedule:
@@ -77,23 +92,25 @@ enum Monitoring {
                         registration: Registration(kind: .schedule, start: p.start, end: p.end, limit: 0, thresholds: [:],
                                                    creditDay: nil, selection: rule.selection))
         case .limit:
-            // the block's own day: from its reset time to the minute before the next one (00:00–23:59 by default)
-            let period = Period.start(containing: now, resetAt: p.resetAt, calendar: calendar)
-            let credit = Credits.today(rule.id, period: period)
+            // the block's own day: from its reset time to the minute before the next one (00:00–23:59 by default).
+            // Its events count the whole day, use from before the block was saved or changed included: a limit set
+            // (or made stricter) after its time is used up locks at once, not only after its next reset. Right after
+            // its reset time changed (FreshCounts), or with a reset off the hour, it counts from registration.
+            let past = countsEarlierUse(p, id: rule.id, now: now)
             let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
                                                   repeats: true,
-                                                  warningTime: p.limitMinutes - credit >= 10 ? DateComponents(minute: 5) : nil)
+                                                  warningTime: p.limitMinutes >= 10 ? DateComponents(minute: 5) : nil)
             var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
             var thresholds: [String: Int] = [:]
-            for t in LimitMath.thresholds(limit: p.limitMinutes, credit: credit) {
+            for t in LimitMath.thresholds(limit: p.limitMinutes) {
                 let name = Names.event(tenth: t.tenth)
-                events[name] = event(rule.selection, minutes: t.minutes)
+                events[name] = event(rule.selection, minutes: t.minutes, past: past)
                 thresholds[name.rawValue] = t.minutes
             }
             return Plan(schedule: schedule, events: events,
                         registration: Registration(kind: .limit, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
-                                                   thresholds: thresholds, creditDay: credit > 0 ? period : nil,
-                                                   selection: rule.selection))
+                                                   thresholds: thresholds, creditDay: nil, selection: rule.selection,
+                                                   pastActivity: past))
         case .place:
             // never registered (sync skips place blocks: iOS reports places to the app, not to a monitor)
             return Plan(schedule: DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
@@ -106,18 +123,25 @@ enum Monitoring {
             let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
                                                   repeats: true,
                                                   warningTime: p.limitMinutes >= 3 ? DateComponents(minute: 1) : nil)
-            return Plan(schedule: schedule, events: [Names.limitEvent: event(rule.selection, minutes: p.limitMinutes)],
+            return Plan(schedule: schedule, events: [Names.limitEvent: event(rule.selection, minutes: p.limitMinutes, past: false)],
                         registration: Registration(kind: .timeout, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
                                                    thresholds: [Names.limitEvent.rawValue: p.limitMinutes], creditDay: nil,
                                                    selection: rule.selection))
         }
     }
 
-    private static func event(_ s: FamilyActivitySelection, minutes: Int) -> DeviceActivityEvent {
-        // The count starts when the monitor is registered (and at every midnight after). With past activity counted,
-        // iOS fires at once for use before the limit existed — indistinguishable from its known early-fire bug.
+    /// Whether a daily limit (with this plan) registered now counts its whole period, earlier use included (Core
+    /// `Counting.includesPast`). When it doesn't, a restart of its count would hand out time already used.
+    static func countsEarlierUse(_ plan: RulePlan, id: UUID, now: Date = Date()) -> Bool {
+        plan.kind == .limit && Counting.includesPast(resetAt: plan.resetAt, freshUntil: FreshCounts.until(id), now: now)
+    }
+
+    /// `past` = count the use since the interval began, from before registration too (daily limits). Without it the
+    /// count starts at registration (and at every interval start after): a time-out's stretch of use, which starts
+    /// over after each break.
+    private static func event(_ s: FamilyActivitySelection, minutes: Int, past: Bool) -> DeviceActivityEvent {
         DeviceActivityEvent(applications: s.applicationTokens, categories: s.categoryTokens, webDomains: s.webDomainTokens,
-                            threshold: DateComponents(minute: minutes), includesPastActivity: false)
+                            threshold: DateComponents(minute: minutes), includesPastActivity: past)
     }
 
     private static func regKey(_ id: UUID) -> String { "registration.\(id.uuidString)" }
@@ -127,12 +151,15 @@ enum Monitoring {
         guard let d = AppGroup.defaults.data(forKey: regKey(id)) else { return nil }
         return try? JSONDecoder().decode(Registration.self, from: d)
     }
-    /// When a rule's monitor was last (re)registered — today's count starts at the later of this and midnight.
+    /// When a rule's monitor was last (re)registered.
     static func registeredAt(_ id: UUID) -> Date? { AppGroup.defaults.object(forKey: regAtKey(id)) as? Date }
 
-    /// When a block's current count began: its last reset, or a later (re-)registration.
+    /// When the count iOS is keeping for a block began: a daily limit's period start (its use from before it was
+    /// saved counts too); a time-out's last reset, or a later (re-)registration. Follows what the monitor was really
+    /// registered with, so a limit still registered by an older version counts from its registration until then.
     static func countingSince(_ id: UUID, resetAt: TimeOfDay, now: Date = Date(), calendar: Calendar = .current) -> Date {
-        max(Period.start(containing: now, resetAt: resetAt, calendar: calendar), registeredAt(id) ?? .distantPast)
+        Counting.since(periodStart: Period.start(containing: now, resetAt: resetAt, calendar: calendar),
+                       registeredAt: registeredAt(id), includesPast: registration(id)?.pastActivity == true, calendar: calendar)
     }
 
     static func forget(_ id: UUID) {
@@ -143,7 +170,11 @@ enum Monitoring {
     /// Starts, restarts or stops DeviceActivity monitors to match the state; `force` restarts those rules even if
     /// unchanged. Returns problems worth showing.
     @discardableResult
-    static func sync(_ state: ArcState, now: Date = Date(), force: Set<UUID> = []) -> [Error] {
+    static func sync(_ given: ArcState, now: Date = Date(), force: Set<UUID> = []) -> [Error] {
+        // another process may have saved newer rules since `given` was read (the app while a monitor callback runs, or
+        // the other way round): work from the freshest copy, so a block just added isn't stopped again
+        let latest = StateStore.load()
+        let state = latest.isSetUp ? latest : given
         // a state that isn't set up may be one that couldn't be read (ArcState.isSetUp): every monitor would look
         // unwanted and be stopped
         guard state.isSetUp else { return [] }
@@ -163,18 +194,19 @@ enum Monitoring {
             $0.plan.isOn && $0.plan.kind == .place && PlaceRules.isRunning(PlaceVisits.get($0.id), now: now)
         }
         let livePlaces = Set(runningPlaces.map { Names.placeActivity($0.id) })
+        // stale monitors go first: at iOS's 20-monitor cap a missing one couldn't start before they're gone
+        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
+            && !livePlaces.contains($0) && !Diag.probeNames.contains($0) }
+        if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
         for rule in runningPlaces where !have.contains(Names.placeActivity(rule.id)) {
             let visit = PlaceVisits.get(rule.id)
             if let started = visit?.started, let latest = PlaceRules.latestEnd(visit, now: now) {
                 startPlaceEnd(rule.id, from: started, to: latest)
             }
         }
-        let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
-            && !livePlaces.contains($0) && !Diag.probeNames.contains($0) }
-        if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
 
         for (name, (rule, p)) in wanted {
-            if have.contains(name), !force.contains(rule.id), registration(rule.id) == p.registration { continue }
+            if have.contains(name), !force.contains(rule.id), registration(rule.id)?.serves(p.registration) == true { continue }
             do {
                 try center.startMonitoring(name, during: p.schedule, events: p.events)
                 if let d = try? JSONEncoder().encode(p.registration) { AppGroup.defaults.set(d, forKey: regKey(rule.id)) }
@@ -196,8 +228,9 @@ enum Monitoring {
         return errors
     }
 
-    /// After iOS reported a limit too early (and so won't report it again today), restart the count with what
-    /// today's marks prove was used. At most 3 times a day, so a device that misfires every time can't loop.
+    /// After iOS reported a limit too early (and so won't report it again this period), register its monitor again
+    /// so iOS counts afresh: a daily limit its whole period again, earlier use included; a time-out from now on.
+    /// At most 3 times a period, so a device that misfires every time can't loop.
     static func rearm(_ rule: Rule, state: ArcState, now: Date = Date(), calendar: Calendar = .current) {
         let key = rearmKey(rule.id)
         let today = Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: calendar)
@@ -208,8 +241,6 @@ enum Monitoring {
         guard count < 3 else { return }
         AppGroup.defaults.set(today, forKey: key + ".day")
         AppGroup.defaults.set(count + 1, forKey: key)
-        let used = LimitMath.usedAtLeast(level: Marks.level(rule.id, period: today), limit: rule.plan.limitMinutes)
-        Credits.set(rule.id, minutes: max(used, Credits.today(rule.id, period: today)), period: today)
         sync(state, now: now, force: [rule.id])
     }
 
@@ -300,7 +331,11 @@ enum Engine {
 
     /// Makes the shields match the rules at `now`. Idempotent; the app calls it whenever it opens, the monitor
     /// extension after every callback. The rules are the source of truth, so a missed callback heals at the next one.
-    static func reconcile(_ state: ArcState, now: Date = Date(), calendar: Calendar = .current, skip: Set<UUID> = []) {
+    static func reconcile(_ given: ArcState, now: Date = Date(), calendar: Calendar = .current, skip: Set<UUID> = []) {
+        // another process may have saved newer rules since `given` was read: act on the freshest copy, so a block just
+        // added isn't lifted and the apps of one just deleted aren't shielded in its old slot
+        let latest = StateStore.load()
+        let state = latest.isSetUp ? latest : given
         // a state that isn't set up may be one that couldn't be read (ArcState.isSetUp): clearing every store for it
         // would lift every block, the lock-in and deletion protection. Everything stays as it is until a real read.
         guard state.isSetUp else { return }
@@ -392,13 +427,21 @@ enum Engine {
               || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock
               || probe.strictUntil != st.strictUntil else { return (st, false) }
         st = StateStore.update { fresh in
+            let before = fresh.rules
             let (ids, _) = tidy(&fresh)
             for id in ids {
                 // the change restarts the count; old marks or credit would mean a different limit (e.g. after a
                 // time-zone change applied it mid-day, or a new reset time) — start clean rather than risk a false lock
                 Marks.clear(id)
                 Credits.clear(id)
+                // a new reset time: its new day may have begun before now, with use the old day already counted —
+                // count from now until its first reset under the new time
+                if let old = before.first(where: { $0.id == id }), let new = fresh.rules.first(where: { $0.id == id }),
+                   new.plan.kind == .limit, old.plan.resetAt != new.plan.resetAt {
+                    FreshCounts.set(id, until: Period.end(after: now, resetAt: new.plan.resetAt, calendar: .autoupdatingCurrent))
+                }
                 guard !fresh.rules.contains(where: { $0.id == id }) else { continue }
+                FreshCounts.clear(id)
                 if let slot = fresh.slot(of: id) { Shielding.clear(Names.store(slot: slot)) }
                 Restarts.clear(id)
                 Breaks.clear(id)

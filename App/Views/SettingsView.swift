@@ -4,7 +4,10 @@ import UIKit
 /// Settings as a native form: Strict lock, deletion protection, heads-ups, Appearance (theme and app icon), About.
 struct SettingsTab: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showGuide = false
+    /// iOS's notifications are off for Arc Lock (heads-ups switched on can't arrive).
+    @State private var notificationsOff = false
     @AppStorage(ArcTheme.key, store: AppGroup.defaults) private var themeRaw = ArcTheme.navy.rawValue
     @State private var icon = SettingsTab.currentIcon
     @State private var aboutOpen = false
@@ -16,7 +19,17 @@ struct SettingsTab: View {
                     strictSection
                     protectionSection
                     Section {
-                        Toggle("Heads-up notifications", isOn: Binding(get: { model.state.headsUp }, set: { model.setHeadsUp($0) }))
+                        Toggle("Heads-up notifications", isOn: Binding(get: { model.state.headsUp }, set: { on in
+                            model.setHeadsUp(on)
+                            if on { Task { await model.headsUpOn(); await readNotifications() } }
+                        }))
+                        if model.state.headsUp && notificationsOff {
+                            Text("Notifications are off for Arc Lock, so heads-ups can't arrive. You can turn them on in Settings › Notifications › Arc Lock.")
+                                .font(.p(14, .regular, .subheadline)).foregroundStyle(Palette.rose)
+                            Button("Open Settings") {
+                                if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                            }
+                        }
                     } footer: {
                         Text("Before a block starts, a daily limit runs out, or a time-out's break begins.")
                     }
@@ -27,6 +40,10 @@ struct SettingsTab: View {
                 }
                 .themedList()
                 .navigationTitle("Settings")
+                .task { await readNotifications() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await readNotifications() } }      // back from iOS's Settings
+                }
                 #if DEBUG
                 .task {
                     if Demo.shot == "appearance" { try? await Task.sleep(for: .milliseconds(400)); proxy.scrollTo("appearance", anchor: .top) }
@@ -36,6 +53,13 @@ struct SettingsTab: View {
             }
             .sheet(isPresented: $showGuide) { HarderGuide() }
         }
+    }
+
+    private func readNotifications() async {
+        #if DEBUG
+        if Demo.isOn { return }
+        #endif
+        notificationsOff = await AppModel.notificationsOff()
     }
 
     // MARK: Strict lock & deletion protection
@@ -215,13 +239,19 @@ struct SettingsTab: View {
     }
 }
 
+/// Lock in, step 1: how many days (14 at most) and LOCK typed; step 2 (LockInConfirm) says what it does and asks for
+/// "I am sure" held for 3 seconds.
 struct LockInSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var days = 7
     @State private var typed = ""
-    private let choices = [1, 3, 7, 14, 30]
-    private var end: Date { Calendar.current.date(byAdding: .day, value: days + 1, to: Calendar.current.startOfDay(for: model.now))! }
+    @State private var confirming = false
+    /// The end shown when Lock in was tapped: the warning page and the lock-in keep it, even past midnight.
+    @State private var shownEnd: Date?
+    @State private var refusal: String?
+    private let choices = [1, 3, 7, 14]
+    private var end: Date { model.lockInEnd(days: days) }
     private var word: String { String(localized: "LOCK") }
 
     var body: some View {
@@ -232,7 +262,7 @@ struct LockInSheet: View {
                     VStack(spacing: 20) {
                         ArcMark(size: 64).padding(.top, 12)
                         Text("Lock in").font(.p(32, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
-                        Text("For the days you choose, every rule stays exactly as it is or gets stricter, and no app can be deleted. There is no early exit.")
+                        Text("For the days you choose, every rule stays exactly as it is, and no app can be deleted. There is no early exit.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
                         HStack(spacing: 8) {
                             ForEach(choices, id: \.self) { d in
@@ -262,10 +292,8 @@ struct LockInSheet: View {
                             }
                         }
                         Button("Lock in through \(Fmt.lastDay(endingAt: end))") {
-                            switch model.startLockIn(days: days) {
-                            case .refused(let why): model.problem = why
-                            default: dismiss()
-                            }
+                            // the warning and the hold come next; say now if it can't start at all
+                            if let why = model.lockInRefusal(days: days) { refusal = why } else { shownEnd = end; confirming = true }
                         }
                         .buttonStyle(BrassButton())
                         .disabled(typed.trimmingCharacters(in: .whitespaces).uppercased() != word.uppercased())
@@ -276,6 +304,13 @@ struct LockInSheet: View {
                 }
             }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.foregroundStyle(Palette.muted) } }
+            .navigationDestination(isPresented: $confirming) {
+                LockInConfirm(days: days, end: shownEnd ?? end, done: { dismiss() }).environmentObject(model)
+            }
+            .problemAlert($refusal)
+            #if DEBUG
+            .onAppear { if Demo.shot == "lockin-confirm" { typed = word; confirming = true } }
+            #endif
         }
         .presentationBackground(Palette.night)
     }

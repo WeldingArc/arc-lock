@@ -266,40 +266,30 @@ enum Marks {
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
 }
 
-/// Minutes of today's use carried over when a limit is changed mid-day (its monitor restarts its count).
-struct UsageCredit: Codable, Equatable {
-    var day: Date
-    var minutes: Int
-}
-
+/// Before 1.1.1 a daily limit counted only from when it was saved or changed, so a change carried today's proven use
+/// over as a credit. Limits now count their whole day (use from before included); this only removes old credits.
 enum Credits {
     private static func key(_ id: UUID) -> String { "credit.\(id.uuidString)" }
-    /// The credit in the block's current period (0 when none or from an earlier one).
-    static func today(_ id: UUID, period: Date) -> Int {
-        guard let d = AppGroup.defaults.data(forKey: key(id)), let c = try? JSONDecoder().decode(UsageCredit.self, from: d),
-              abs(c.day.timeIntervalSince(period)) < 1 else { return 0 }
-        return c.minutes
-    }
-    static func set(_ id: UUID, minutes: Int, period: Date) {
-        guard minutes > 0 else { clear(id); return }
-        if let d = try? JSONEncoder().encode(UsageCredit(day: period, minutes: minutes)) {
-            AppGroup.defaults.set(d, forKey: key(id))
-        }
-    }
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
 }
 
-/// The day a limit's count was last restarted by an edit. iOS restarts its count on every such edit and the
-/// carried-over use is rounded down to a tenth, so only one restart a period is allowed; later ones wait for its
-/// next reset.
+/// Before 1.1.1: the day a limit's count was last restarted by an edit (one a day was allowed, as the carried-over
+/// use was rounded down). A limit's count now includes its earlier use, so every stricter edit applies at once; this
+/// only removes the old marks.
 enum Restarts {
     private static func key(_ id: UUID) -> String { "restart.\(id.uuidString)" }
-    /// Whether the count was restarted since the block's last reset (`period` = Period.start).
-    static func happenedToday(_ id: UUID, period: Date, now: Date = Date()) -> Bool {
-        guard let d = AppGroup.defaults.object(forKey: key(id)) as? Date else { return false }
-        return d >= period && d <= now
-    }
-    static func mark(_ id: UUID, now: Date = Date()) { AppGroup.defaults.set(now, forKey: key(id)) }
+    static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
+}
+
+/// A daily limit whose reset time just changed counts afresh, from the change until its first reset under the new
+/// time. Its new day can begin before the change (4:00 → midnight lands at 4:00, in a day that began at midnight),
+/// and that use already counted toward the old day: counting it again could lock all day. So for that stretch its
+/// monitor counts from registration only (Monitoring.plan), like a time-out.
+enum FreshCounts {
+    private static func key(_ id: UUID) -> String { "fresh.\(id.uuidString)" }
+    static func until(_ id: UUID) -> Date? { AppGroup.defaults.object(forKey: key(id)) as? Date }
+    static func isOn(_ id: UUID, now: Date) -> Bool { (until(id) ?? .distantPast) > now }
+    static func set(_ id: UUID, until: Date) { AppGroup.defaults.set(until, forKey: key(id)) }
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id)) }
 }
 

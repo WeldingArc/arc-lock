@@ -17,6 +17,8 @@ final class AppModel: ObservableObject {
     @Published var toast: String?
     /// The selected tab, kept here so a theme change (which redraws every screen) stays on Settings.
     @Published var tab: AppTab = .home
+    /// The setup page, kept here for the same reason (a new text size redraws every screen).
+    @Published var setupPage = 0
     @Published var problem: String?
     /// False until this launch has confirmed Screen Time access (a fresh process can read "not determined" at first).
     @Published private(set) var authChecked = false
@@ -24,6 +26,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var accessLost = false
     /// Bumped when the usage lines should ask iOS again (coming back to the app, or after a change).
     @Published private(set) var reportEpoch = 0
+    /// This process reads the shared data as empty although a set-up state is saved on disk: it read it before the
+    /// first unlock after a restart, and iOS can keep answering empty until Arc Lock starts again. The app asks for
+    /// that instead of showing setup (whose last step must never save over the real blocks, so it can't finish).
+    @Published private(set) var needsRelaunch = false
 
     /// Debug screenshots: sample state, fixed clock, no Screen Time calls.
     private var demo = false
@@ -54,6 +60,11 @@ final class AppModel: ObservableObject {
             }
             .store(in: &bag)
         ticker = Timer.publish(every: 15, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }
+        // after a restart nothing could be read before the first unlock: catch up as soon as it can
+        NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refresh() }
+            .store(in: &bag)
         // a place block started or ended (iOS reported arriving or leaving)
         NotificationCenter.default.publisher(for: .placesChanged)
             .receive(on: RunLoop.main)
@@ -66,6 +77,7 @@ final class AppModel: ObservableObject {
                 .store(in: &bag)
         }
         refresh()
+        checkStale()
         Task { await checkAccess() }
         #if DEBUG
         switch UserDefaults.standard.string(forKey: "probe") {
@@ -88,24 +100,49 @@ final class AppModel: ObservableObject {
         status == .approved
     }
 
-    /// Asking again is silent while access is still granted, and the only reliable way to notice that it was
-    /// switched off in Settings (the status publisher doesn't always fire).
+    /// Coming back to the app: is Screen Time access still there? A fresh process can read "not determined" for a
+    /// moment, and asking is silent while access is still granted — so Arc Lock asks on its own once per launch,
+    /// without waiting for the answer (on iPad it can come back late or never), and reads the status meanwhile. After
+    /// that only the "access is off" screen's Continue asks: a "Don't Allow" must not bring iOS's question straight
+    /// back every time the app becomes active. (Access switched off in Settings also shows up when monitoring is
+    /// refused: `accessLost`.)
     func checkAccess() async {
         defer { authChecked = true }
         if demo { return }
         guard state.onboarded else { return }
-        // Without an Apple Account (e.g. in the Simulator) the request never returns: don't hold the screen for it.
+        // the logo shows meanwhile; never for long (without an Apple Account iOS's answer never comes)
         let patience = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(6))
             self?.authChecked = true
         }
         defer { patience.cancel() }
-        if !isAuthorized || accessLost {
-            try? await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        guard !isAuthorized || accessLost else { return }
+        if !autoAsked {
+            autoAsked = true
+            askScreenTime()
         }
-        auth = AuthorizationCenter.shared.authorizationStatus
-        if Self.granted(auth) { accessLost = false }
-        if isAuthorized { refresh() }
+        guard !accessLost else { return }          // cleared once iOS answers the request (askScreenTime)
+        for _ in 0..<12 {
+            if recheckScreenTime() { return }       // refreshes once access is back
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
+    /// Whether this launch has asked for Screen Time access on its own (see checkAccess).
+    private var autoAsked = false
+    /// When the last request for Screen Time access started (nil once it answered).
+    private var askedAt: Date?
+
+    /// Asks iOS for Screen Time access in the background (silent while it's still granted) and re-reads the status
+    /// when the answer comes. One request at a time: a new one only after 30 seconds without an answer.
+    private func askScreenTime() {
+        if let at = askedAt, Date().timeIntervalSince(at) < 30 { return }
+        askedAt = Date()
+        Task {
+            try? await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            askedAt = nil
+            recheckScreenTime()
+        }
     }
 
     // MARK: reading
@@ -207,12 +244,19 @@ final class AppModel: ObservableObject {
         if s.rules.contains(where: { s.slot(of: $0.id) == nil }) { s = StateStore.update { $0.assignSlots() } }
         state = s
         now = Date()
+        checkStale()
         guard isAuthorized else { return }
         report(Monitoring.sync(s))
         Monitoring.finishBreaks(s)
         Engine.reconcile(s)
         PlaceWatcher.shared.sync(s)
         Diag.dumpMonitors()
+    }
+
+    /// See `needsRelaunch`: nothing at all comes back from the shared data, yet the file on disk holds a set-up state
+    /// (a state that's there but can't be decoded is a different case, kept as `.unreadable`).
+    private func checkStale() {
+        needsRelaunch = !state.isSetUp && !StateStore.isSaved && StateStore.setUpOnDisk
     }
 
     private func report(_ errors: [Error]) {
@@ -235,12 +279,7 @@ final class AppModel: ObservableObject {
             s.applicationTokens = Set(apps); s.categoryTokens = Set(cats); s.webDomainTokens = Set(webs)
             return s
         }
-        // fresh tokens re-register every limit, which restarts iOS's count: carry today's proven use over first
-        for r in state.rules where r.plan.kind == .limit && status(r) == .counting {
-            let used = LimitMath.usedAtLeast(level: usageLevel(r), limit: r.plan.limitMinutes)
-            let period = periodStart(r.plan)
-            Credits.set(r.id, minutes: max(Credits.today(r.id, period: period), used), period: period)
-        }
+        // fresh tokens register every limit again: iOS then counts its whole day again, earlier use included
         commit { st in
             for i in st.rules.indices {
                 st.rules[i].selection = fresh(st.rules[i].selection)
@@ -273,7 +312,9 @@ final class AppModel: ObservableObject {
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
-    private func commit(_ change: (inout ArcState) -> Void) {
+    /// Saves a change and makes the monitors and shields match it. `force` = blocks whose monitors are registered
+    /// again even if unchanged (see Monitoring.sync).
+    private func commit(force: Set<UUID> = [], _ change: (inout ArcState) -> Void) {
         if demo { change(&state); state.assignSlots(); return }
         // setting up (onboarding) writes a state that isn't set up yet: only while the iPhone is unlocked, and only if no
         // set-up state is saved on disk — a process that read the shared data before the first unlock after a restart
@@ -285,7 +326,7 @@ final class AppModel: ObservableObject {
         reportEpoch += 1
         PlaceWatcher.shared.sync(state)
         guard isAuthorized else { return }
-        report(Monitoring.sync(state))
+        report(Monitoring.sync(state, force: force))
         Engine.reconcile(state)
     }
 
@@ -318,6 +359,18 @@ final class AppModel: ObservableObject {
     func requestNotifications() async {
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) ?? false
         if !granted { setHeadsUp(false) }
+    }
+
+    /// Whether iOS's notifications are off for Arc Lock (heads-ups can't arrive then).
+    static func notificationsOff() async -> Bool {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied
+    }
+
+    /// Heads-ups switched on in Settings: if iOS never asked about notifications (setup was left early, or an older
+    /// version), ask now — without waiting for the answer.
+    func headsUpOn() async {
+        guard await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .notDetermined else { return }
+        Task { await requestNotifications() }
     }
 
     func finishOnboarding() { commit { $0.onboarded = true } }
@@ -449,24 +502,21 @@ final class AppModel: ObservableObject {
             }
             return .scheduled(from)
         default:
-            // A new threshold or new apps restart the limit's count in iOS. Carry over what today's marks prove was
-            // already used, so a stricter limit never hands out extra time (and locks at once if it's already used up).
+            // A new threshold, new apps or a new reset time make iOS count the block again. A daily limit then counts
+            // its whole day, use from before the change included (Monitoring.plan): a stricter limit applies at once,
+            // and locks at once if that use already fills it.
             let restarts = plan.kind.countsUse && existing.plan.kind == plan.kind &&
                 (plan.limitMinutes != existing.plan.limitMinutes || selection != existing.selection || plan.resetAt != existing.plan.resetAt)
-            if restarts, !demo, case .stricterOnly(let from) = access(existing),
-               plan.kind == .timeout || Restarts.happenedToday(id, period: periodStart(existing.plan), now: now) {
-                // A restart hands out time already used: a time-out can't carry its count over (iOS reports only the
-                // break threshold), and a second limit restart this period would undo the first one's carry-over.
-                // Both wait for the block's next reset.
+            if restarts, !demo, plan.kind == .timeout || !Monitoring.countsEarlierUse(plan, id: id, now: now),
+               case .stricterOnly(let from) = access(existing) {
+                // A time-out counts its stretch of use from registration (iOS reports only the break threshold), and so
+                // does a limit right after its reset time changed or with a reset off the hour: a restart would hand out
+                // use already counted. It waits for the block's next reset.
                 commit { st in
                     guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
                     st.rules[i].pending = RuleChange(plan: plan, selection: selection, effectiveAt: from)
                 }
                 return .scheduled(from)
-            }
-            // only a limit that is locked in for today needs the once-a-day rule; one that isn't strict can be stopped
-            if restarts, !demo, plan.kind == .limit, status(existing) == .counting, case .stricterOnly = access(existing) {
-                Restarts.mark(id, now: now)
             }
             // a block that becomes strict runs again, even if it was stopped by hand
             if !demo && state.isStrict(plan, id: id, now: now) && !state.isStrict(existing.plan, id: id, now: now) { Stops.clear(id) }
@@ -478,20 +528,31 @@ final class AppModel: ObservableObject {
             }
             defer { if placeRestarts { PlaceWatcher.shared.recheck(id) } }
             if restarts && !demo && plan.kind == .limit {
-                var used = 0
-                if existing.plan.isOn && status(existing) == .counting {
-                    used = max(Credits.today(id, period: periodStart(existing.plan)),
-                               LimitMath.usedAtLeast(level: usageLevel(existing), limit: existing.plan.limitMinutes))
+                // a new reset time: the new day may have begun before now, with use the old day already counted —
+                // it counts from now until its first reset under the new time (Monitoring.plan)
+                if plan.resetAt != existing.plan.resetAt {
+                    FreshCounts.set(id, until: Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
                 }
-                // carried into the new version's period (its reset time may have changed): only when that period began
-                // no later than the old one, so all of the counted use really falls inside it
-                if periodStart(plan) > periodStart(existing.plan) { used = 0 }
+                // iOS reports the new count moments after the save; until then the bar keeps what today's marks prove,
+                // where that use still counts: the new count includes earlier use, and no app was taken out
+                var used = 0
+                if existing.plan.isOn, Engine.counts(existing, now: now, calendar: calendar), !selection.lost(from: existing.selection),
+                   Monitoring.countsEarlierUse(plan, id: id, now: now) {
+                    used = LimitMath.usedAtLeast(level: usageLevel(existing), limit: existing.plan.limitMinutes)
+                }
                 Marks.clear(id)
-                Credits.set(id, minutes: plan.isOn ? used : 0, period: periodStart(plan))
+                Credits.clear(id)          // carried-over use from versions before 1.1.1: the new count includes it
                 let level = LimitMath.level(forUsed: used, limit: plan.limitMinutes)
                 if plan.isOn && level > 0 { Marks.raise(id, to: level, now: now, period: periodStart(plan)) }
             }
-            commit { st in
+            // A limit or time-out that starts counting today because of this change (today added to its days): iOS
+            // kept counting while it rested, and a threshold it passed then (ignored) isn't reported again today, so
+            // it's registered again — a limit then counts today's use at once, a time-out from now.
+            var updated = existing
+            updated.plan = plan
+            let startsCounting = !demo && plan.kind.countsUse && Engine.counts(updated, now: now, calendar: calendar)
+                && !Engine.counts(existing, now: now, calendar: calendar)
+            commit(force: startsCounting ? [id] : []) { st in
                 guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
                 st.rules[i].plan = plan
                 st.rules[i].selection = selection
@@ -521,6 +582,7 @@ final class AppModel: ObservableObject {
             Marks.clear(id)
             Credits.clear(id)
             Restarts.clear(id)
+            FreshCounts.clear(id)
             Breaks.clear(id)
             Stops.clear(id)
             PlaceVisits.clear(id)
@@ -571,18 +633,33 @@ final class AppModel: ObservableObject {
 
     // MARK: lock-in
 
-    /// Locks every rule and stops app deletion through the end of the day `days` days from today.
-    func startLockIn(days: Int) -> Outcome {
-        if !demo { now = Date() }
+    /// Why a lock-in of `days` days can't start now, or nil when it can (asked before the warning and the hold).
+    func lockInRefusal(days: Int, end: Date? = nil) -> String? {
         guard state.strictLock else {
-            return .refused(String(localized: "Lock-in needs Strict lock. Turn Strict lock on in Settings first."))
+            return String(localized: "Lock-in needs Strict lock. Turn Strict lock on in Settings first.")
         }
-        let end = calendar.date(byAdding: .day, value: days + 1, to: calendar.startOfDay(for: Date()))!
-        if let current = state.lockInUntil, current >= end, current > Date() {
-            return .refused(String(localized: "A lock-in can be made longer, never shorter."))
+        guard Limits.lockInDays.contains(days) else { return String(localized: "A lock-in lasts 1 to 14 days.") }
+        if let current = state.lockInUntil, current >= end ?? lockInEnd(days: days), current > Date() {
+            return String(localized: "A lock-in can be made longer, never shorter.")
         }
+        return nil
+    }
+
+    /// The end of the day `days` days from today (also what the Lock in screens show).
+    func lockInEnd(days: Int) -> Date {
+        calendar.date(byAdding: .day, value: days + 1, to: calendar.startOfDay(for: Date()))!
+    }
+
+    /// Locks every rule and stops app deletion through the end of the day `days` days from today (14 at most), or
+    /// through `shownEnd` — the end the confirmation screen showed — if midnight passed while it was open: that's
+    /// what the person agreed to (never later than allowed).
+    func startLockIn(days: Int, shownEnd: Date? = nil) -> Outcome {
+        if !demo { now = Date() }
+        var end = lockInEnd(days: days)
+        if let shownEnd, shownEnd > Date(), shownEnd < end { end = shownEnd }
+        if let why = lockInRefusal(days: days, end: end) { return .refused(why) }
         commit { $0.lockInUntil = end }
-        // a lock-in keeps every block as it is or stricter: blocks stopped by hand run again
+        // a lock-in keeps every block as it is: blocks stopped by hand run again
         if !demo {
             for r in state.rules { Stops.clear(r.id) }
             Engine.reconcile(state)

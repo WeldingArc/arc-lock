@@ -81,7 +81,7 @@ struct HomeTab: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
             #if DEBUG
-            .onAppear { if Demo.shot == "lockin" { showLockIn = true } }
+            .onAppear { if Demo.shot == "lockin" || Demo.shot == "lockin-confirm" { showLockIn = true } }
             #endif
         }
     }

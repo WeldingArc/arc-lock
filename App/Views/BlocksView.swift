@@ -107,7 +107,12 @@ struct BlocksTab: View {
     private var placesNote: LocalizedStringKey? {
         if isDemo { return nil }
         switch places.access {
-        case .always: return nil
+        case .always:
+            if places.lowPower { return "Low Power Mode is on, so place blocks can't start or end while Arc Lock is closed." }
+            if places.backgroundOff {
+                return "Background App Refresh is off, so place blocks can't start or end while Arc Lock is closed. You can turn it on in Settings › General › Background App Refresh."
+            }
+            return nil
         case .whileUsing: return "Location access is “While Using”, so place blocks can't start or end while Arc Lock is closed. You can change it in Settings › Arc Lock › Location."
         case .approximate: return "Precise Location is off for Arc Lock, so iOS can't tell when you arrive or leave. You can change it in Settings › Arc Lock › Location."
         case .denied: return "Location access is off for Arc Lock, so place blocks can't start or end. You can change it in Settings › Arc Lock › Location."
@@ -157,6 +162,7 @@ struct BlocksTab: View {
 /// One block in the list: name and state, its hours or limits, what it blocks, and today's use.
 struct BlockRow: View {
     @EnvironmentObject private var model: AppModel
+    @ObservedObject private var places = PlaceWatcher.shared
     let rule: Rule
     let onEdit: () -> Void
     /// Set when the block isn't strict and is blocking right now.
@@ -208,6 +214,10 @@ struct BlockRow: View {
                 default:
                     EmptyView()
                 }
+            }
+            if rule.plan.kind == .place, places.cantWatch(rule.id) {
+                Text("iOS couldn't watch this place, so this block can't start when you arrive. Arc Lock tries again each time you open it.")
+                    .font(.p(13, .regular, .footnote)).foregroundStyle(Palette.rose)
             }
             if let until = model.strictHold(rule) {
                 Label("Strict until \(model.holdText(rule, until))", systemImage: "lock")

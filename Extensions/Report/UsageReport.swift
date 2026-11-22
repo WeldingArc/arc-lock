@@ -48,8 +48,9 @@ struct UsageScene: DeviceActivityReportScene {
         let state = StateStore.load()
         let rule = state.rules.first { state.slot(of: $0.id) == slot }
         let limit = rule.flatMap { $0.plan.kind == .limit ? $0 : nil }
-        // The block's own day starts at its reset time (midnight by default). A daily limit counts from then, or from
-        // when it was created or changed (plus the time carried over by that change): the same count that locks it.
+        // The block's own day starts at its reset time (midnight by default). A daily limit counts all of it, use from
+        // before it was saved included (one still registered by an older version: from its registration) — the same
+        // count that locks it.
         let periodStart = rule.map { Period.start(containing: now, resetAt: $0.plan.resetAt, calendar: calendar) } ?? midnight
         let since = limit.map { Monitoring.countingSince($0.id, resetAt: $0.plan.resetAt, now: now, calendar: calendar) } ?? periodStart
         var seconds: TimeInterval = 0
@@ -65,9 +66,8 @@ struct UsageScene: DeviceActivityReportScene {
                 }
             }
         }
-        var minutes = Int(seconds / 60)
-        if let limit { minutes += Credits.today(limit.id, period: periodStart) }
-        // "since 4:00 AM" when the count began later than midnight (a reset time, or a change today)
+        let minutes = Int(seconds / 60)
+        // "since 4:00 AM" when the count began later than midnight (a reset time, or a registration by an older version)
         let shownSince = since > periodStart ? since : (rule.map { $0.plan.resetAt != .midnight } == true ? periodStart : nil)
         return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: shownSince)
     }

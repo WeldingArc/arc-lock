@@ -21,6 +21,8 @@ struct RuleEditor: View {
     @State private var confirmPlaceStart = false
     @State private var editingPlace: PlaceTarget?
     @State private var loaded = false
+    /// Why Save was refused, shown by this sheet itself (see problemAlert).
+    @State private var refusal: String?
     @ObservedObject private var places = PlaceWatcher.shared
 
     private var existing: Rule? {
@@ -47,10 +49,16 @@ struct RuleEditor: View {
                     case .schedule: whenSection
                     case .limit: limitSection
                     case .timeout: timeoutSection
-                    case .place:
-                        locationSection
-                        placeSection
+                    case .place: EmptyView()
                     }
+                }
+                .disabled(readOnly)
+                if plan.kind == .place {
+                    // stays tappable on a running block: location access is what lets it end when you leave
+                    locationSection
+                    placeSection.disabled(readOnly)
+                }
+                Group {
                     strictSection
                     if existing != nil && !readOnly { deleteSection }
                 }
@@ -97,6 +105,7 @@ struct RuleEditor: View {
             }
         }
         .presentationBackground(Palette.night)
+        .problemAlert($refusal)
         .onAppear(perform: load)
         #if DEBUG
         .task {
@@ -140,9 +149,14 @@ struct RuleEditor: View {
         case .stricterOnly(let from) where plan.kind == .timeout:
             notice("clock.arrow.circlepath",
                    String(localized: "This time-out is locked in until it resets. A longer break or more days apply now; any other change — the minutes of use, the apps, a shorter break, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
+        case .stricterOnly(let from) where existing.map({ !Monitoring.countsEarlierUse($0.plan, id: $0.id, now: model.now) }) ?? false:
+            // counting from its registration (its reset time just changed, or it's off the hour): a new count would
+            // hand out time already used, so only more days apply now (AppModel.save)
+            notice("clock.arrow.circlepath",
+                   String(localized: "This limit is locked in until it resets. More days apply now; any other change — the minutes, the apps, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
         case .stricterOnly(let from):
             notice("clock.arrow.circlepath",
-                   String(localized: "This limit is locked in until it resets. One stricter change applies now; anything else — more time, fewer apps or days, the reset time, deleting, or a second change — starts at \(Fmt.moment(from, now: model.now))."))
+                   String(localized: "This limit is locked in until it resets. Stricter changes apply now; anything else — more time, fewer apps or days, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
         case .free:
             EmptyView()
         }
@@ -175,6 +189,8 @@ struct RuleEditor: View {
                 if k != .schedule && plan.days == [2, 3, 4, 5, 6] { plan.days = Set(1...7) }
                 if k == .timeout && was != .timeout { plan.limitMinutes = 20 }
                 if k == .limit && was == .timeout { plan.limitMinutes = 30 }
+                // a daily limit resets on the hour (see hourPicker): a time-out's 4:30 becomes 4:00
+                if k == .limit && was != .limit && plan.resetAt.minute != 0 { plan.resetAt = TimeOfDay(plan.resetAt.hour, 0) }
                 if k == .place { places.locate() }
             })) {
                 Text("Schedule").tag(RuleKind.schedule)
@@ -323,7 +339,7 @@ struct RuleEditor: View {
     /// Location access, asked for only here: when a place block is set up. iOS asks twice (while using, then always);
     /// both answers are made in its own prompts.
     @ViewBuilder private var locationSection: some View {
-        if (!isDemo || demoShot == "placenew") && places.access != .always {
+        if (!isDemo || demoShot == "placenew") && (places.access != .always || places.backgroundOff) {
             Section {
                 switch places.access {
                 case .notAsked:
@@ -346,7 +362,12 @@ struct RuleEditor: View {
                     Text("Location access is off for Arc Lock, so a place block can't start or end. You can change it in Settings › Arc Lock › Location.")
                     Button("Open Settings") { openSettings() }.fontWeight(.semibold)
                 case .always:
-                    EmptyView()
+                    // iOS doesn't wake Arc Lock for arrivals while Background App Refresh is off
+                    if places.lowPower {
+                        Text("Low Power Mode is on, so place blocks can't start or end while Arc Lock is closed.")
+                    } else {
+                        Text("Background App Refresh is off, so place blocks can't start or end while Arc Lock is closed. You can turn it on in Settings › General › Background App Refresh.")
+                    }
                 }
             } header: {
                 Text("Location access")
@@ -477,6 +498,18 @@ struct RuleEditor: View {
                    displayedComponents: .hourAndMinute)
     }
 
+    /// A daily limit resets on the hour: iOS counts a limit's earlier use from the start of an hour, so a reset like
+    /// 4:30 would count use from before it. A time off the hour saved by an older version stays a choice until
+    /// another is picked.
+    private func hourPicker(_ title: LocalizedStringKey, value: Binding<TimeOfDay>) -> some View {
+        var hours = (0..<24).map { TimeOfDay($0, 0) }
+        if value.wrappedValue.minute != 0 { hours.append(value.wrappedValue); hours.sort() }
+        return Picker(title, selection: value) {
+            ForEach(hours, id: \.self) { t in Text(verbatim: t.text).tag(t) }
+        }
+        .pickerStyle(.menu)
+    }
+
     private var limitSection: some View {
         Section {
             Stepper {
@@ -486,12 +519,12 @@ struct RuleEditor: View {
             } onDecrement: {
                 step(&plan.limitMinutes, by: plan.limitMinutes > 60 ? -15 : -5, in: Limits.limitMinutes)
             }
-            timePicker("Resets at", value: $plan.resetAt)
+            hourPicker("Resets at", value: $plan.resetAt)
             DayChips(days: $plan.days).padding(.vertical, 4)
         } header: {
             Text("Daily limit")
         } footer: {
-            Text("When the time is used up, these apps lock until \(resetText). A new limit starts counting when you save it.")
+            Text("When the time is used up, these apps lock until \(resetText). Today's use so far counts too, so a limit that's already used up locks as soon as you save it.")
         }
         .listRowBackground(Palette.card)
     }
@@ -599,7 +632,7 @@ struct RuleEditor: View {
         case .scheduled(let at):
             model.toast = String(localized: "Saved. It takes effect at \(Fmt.moment(at, now: model.now)). Until then the current version runs.")
             dismiss()
-        case .refused(let why): model.problem = why
+        case .refused(let why): refusal = why
         }
     }
 }

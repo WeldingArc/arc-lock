@@ -8,28 +8,44 @@ import Foundation
 import ManagedSettings
 
 final class ActivityMonitor: DeviceActivityMonitor {
+    /// One callback at a time: iOS can deliver two at once (Brave reports use in batches), and each reads the state,
+    /// marks and shields and writes them back, so run together one could undo the other (a used-up limit lifted).
+    private static let serial = NSLock()
+
     override func intervalDidStart(for activity: DeviceActivityName) {
+        Self.serial.lock()
+        defer { Self.serial.unlock() }
         super.intervalDidStart(for: activity)
         Diag.log("start \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
         guard state.isSetUp else { return }
-        // The daily monitor, and a block's own reset (its interval start), re-register limits whose thresholds were
-        // only meant for the period that just ended.
+        // The daily monitor, and a block's own reset (its interval start), register again what changed for the new
+        // period (a change applied at the reset). How a monitor counts doesn't need it: from each reset on, every
+        // registration counts the whole period (Registration.serves).
         if activity == Names.daily || Names.ruleID(activity) != nil || changed { Monitoring.sync(state) }
         Monitoring.finishBreaks(state)
         Engine.reconcile(state)
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
+        Self.serial.lock()
+        defer { Self.serial.unlock() }
         super.intervalDidEnd(for: activity)
         Diag.log("end \(activity.rawValue)")
         var (state, _) = Engine.housekeep()
         guard state.isSetUp else { return }
         var skip = Set<UUID>()
         if let id = Names.ruleID(activity), let rule = state.rules.first(where: { $0.id == id }), rule.plan.kind == .schedule {
-            // The window is over — lift it now even if this callback came a moment early.
-            if let store = Engine.store(for: id, in: state) { Shielding.clear(store) }
-            skip.insert(id)
+            // The window is over — lift it now even if this callback came a moment early. An end while the window
+            // still has more than a few minutes to run belongs to an older interval (iOS can send one when the block's
+            // monitor is registered again, as after an edit or new app tokens): then reconcile decides, from the rules.
+            let left = Engine.status(rule, now: Date()).blockingUntil?.timeIntervalSinceNow ?? 0
+            if left <= 5 * 60 {
+                if let store = Engine.store(for: id, in: state) { Shielding.clear(store) }
+                skip.insert(id)
+            } else {
+                Diag.log("  → still runs \(Int(left / 60)) min: an older interval's end, left to reconcile")
+            }
         }
         // A time-out's break is over: lift it and start counting toward the next one. Then look again at what was
         // waiting for it to end (deletion protection may switch off once a strict break is over).
@@ -43,6 +59,8 @@ final class ActivityMonitor: DeviceActivityMonitor {
     }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
+        Self.serial.lock()
+        defer { Self.serial.unlock() }
         super.eventDidReachThreshold(event, activity: activity)
         Diag.log("threshold \(event.rawValue) in \(activity.rawValue)")
         let (state, changed) = Engine.housekeep()
@@ -58,9 +76,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
             Engine.reconcile(state)
             return
         }
-        // Registered for a different version of the rule (a change applied at midnight, or yesterday's credit):
-        // these thresholds don't mean what they say — re-register, don't block.
-        guard let registered = Monitoring.registration(id), registered == Monitoring.plan(for: rule, now: now).registration,
+        // Registered for a different version of the rule (a change applied at its reset, or by an older version of
+        // Arc Lock): these thresholds don't mean what they say — re-register, don't block.
+        guard let registered = Monitoring.registration(id), registered.serves(Monitoring.plan(for: rule, now: now).registration),
               let tenth = Names.tenth(of: event), let minutes = registered.thresholds[event.rawValue] else {
             Diag.log("  → registered for a different version: re-sync")
             Monitoring.sync(state, now: now)
@@ -68,8 +86,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
             return
         }
         // iOS sometimes reports a threshold early (right after registering, or twice). Time used can't outrun the
-        // clock, so a threshold that couldn't have been reached yet is ignored. iOS won't send that event again
-        // today, so a too-early limit restarts its count from what today's marks prove.
+        // clock, so a threshold that couldn't have been reached yet is ignored: since the reset for a daily limit
+        // that counts its earlier use, since registering otherwise (a time-out, a limit just given a new reset time).
+        // iOS won't send that event again this period, so the monitor is registered again and counts afresh.
         let since = Monitoring.countingSince(id, resetAt: rule.plan.resetAt, now: now)
         guard Plausibility.thresholdIsReal(minutes: minutes, countingSince: since, now: now) else {
             Diag.log("  → too early (\(minutes) min since \(since)): re-arm")
@@ -110,6 +129,10 @@ final class ActivityMonitor: DeviceActivityMonitor {
         let now = Date()
         guard event == Names.limitEvent, let id = Names.ruleID(activity),
               let rule = StateStore.load().rules.first(where: { $0.id == id }), Engine.counts(rule, now: now),
+              // a daily limit saved (or changed) when its time was nearly or fully used: iOS warns at once, for use
+              // from before; "5 minutes left" would be wrong — its lock, if it's used up, follows at once
+              rule.plan.kind != .limit || Monitoring.registeredAt(id).map({ now.timeIntervalSince($0) >= 60 }) ?? true,
+              !(rule.plan.kind == .limit && Engine.status(rule, now: now).isBlocking),
               let minutes = Monitoring.registration(id)?.thresholds[event.rawValue],
               // the warning comes 5 minutes before the limit, so the same clock check applies
               Plausibility.thresholdIsReal(minutes: max(1, minutes - (rule.plan.kind == .timeout ? 1 : 5)),

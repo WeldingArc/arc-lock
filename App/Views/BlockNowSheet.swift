@@ -6,6 +6,9 @@ struct BlockNowSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var selection = FamilyActivitySelection()
+    @State private var loaded = false
+    /// Why Start was refused, shown by this sheet itself (see problemAlert).
+    @State private var refusal: String?
     @State private var minutes = 60
     @State private var showPicker = false
     @State private var confirm = false
@@ -14,7 +17,8 @@ struct BlockNowSheet: View {
     @State private var newDomain = ""
     @State private var domainError = false
     private var nothingChosen: Bool { selection.isEmpty && domains.isEmpty }
-    private var stoppable: Bool { !strict || !model.strictLockActive }
+    /// During a lock-in nothing can be stopped, Block now included.
+    private var stoppable: Bool { !model.lockInActive && (!strict || !model.strictLockActive) }
     private let presets = [15, 30, 60, 120, 240]
     private var overCap: Bool {
         selection.applicationTokens.count > Limits.maxApps || selection.webDomainTokens.count > Limits.maxDomains
@@ -62,9 +66,13 @@ struct BlockNowSheet: View {
                     Toggle("Strict lock", isOn: $strict)
                 } footer: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(strict ? "Once it starts, it can't be stopped." : "You can stop it any time.")
-                        if strict && !model.strictLockActive {
-                            Text("Strict lock is off in Settings, so for now it can be stopped.").foregroundStyle(Palette.rose)
+                        if model.lockInActive {
+                            Text("You're locked in, so it can't be stopped.")
+                        } else {
+                            Text(strict ? "Once it starts, it can't be stopped." : "You can stop it any time.")
+                            if strict && !model.strictLockActive {
+                                Text("Strict lock is off in Settings, so for now it can be stopped.").foregroundStyle(Palette.rose)
+                            }
                         }
                     }
                 }
@@ -95,7 +103,11 @@ struct BlockNowSheet: View {
             }
         }
         .presentationBackground(Palette.night)
+        .problemAlert($refusal)
         .onAppear {
+            // once: it can run again when iOS's app picker closes, and must not undo what was just picked
+            guard !loaded else { return }
+            loaded = true
             if let last = model.state.lastSessionSelection { selection = last }
             minutes = model.state.lastSessionMinutes
         }
@@ -141,7 +153,7 @@ struct BlockNowSheet: View {
 
     private func start() {
         switch model.startSession(selection: selection, domains: domains, minutes: minutes, strict: strict) {
-        case .refused(let why): model.problem = why
+        case .refused(let why): refusal = why
         default: dismiss()
         }
     }

@@ -29,19 +29,38 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var access: Access = .notAsked
     /// The latest location iOS reported (for "you're there now" and centering the map). Kept in memory only.
     @Published private(set) var location: CLLocation?
+    /// Background App Refresh is off (in Settings, or by Low Power Mode): iOS then doesn't wake Arc Lock when you
+    /// arrive or leave, so place blocks start and end only while it's open.
+    @Published private(set) var backgroundOff = false
+    /// Low Power Mode is on (it turns Background App Refresh off for every app).
+    @Published private(set) var lowPower = false
+    /// Places iOS refused to watch ("<block id>#<position>"); tried again at every sync (each time Arc Lock opens).
+    @Published private(set) var failed: Set<String> = []
 
     private let manager = CLLocationManager()
     /// Set while the first request (while using) is showing, so the second (always) follows right after.
     private var upgradeNext = false
     private static let askedAlwaysKey = "placesAskedAlways"
-    /// iOS shows its "Always" question only once; after that the choice is made in Settings.
-    var askedAlways: Bool { UserDefaults.standard.bool(forKey: Self.askedAlwaysKey) }
+    /// iOS shows its "Always" question only once; after that the choice is made in Settings (published, so the
+    /// editor swaps Continue for Open Settings as soon as it was asked).
+    @Published private(set) var askedAlways = UserDefaults.standard.bool(forKey: PlaceWatcher.askedAlwaysKey)
+
+    private func markAskedAlways() {
+        UserDefaults.standard.set(true, forKey: Self.askedAlwaysKey)
+        askedAlways = true
+    }
 
     private override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         readAccess()
+        readBackground()
+        for name in [UIApplication.backgroundRefreshStatusDidChangeNotification, Notification.Name.NSProcessInfoPowerStateDidChange] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.readBackground()
+            }
+        }
         // after a restart, crossings that came before the first unlock were ignored (the state couldn't be read):
         // ask again where you are once it can
         NotificationCenter.default.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification,
@@ -60,7 +79,16 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
     /// this delegate.
     func start() {
         readAccess()
+        readBackground()
     }
+
+    private func readBackground() {
+        lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        backgroundOff = lowPower || UIApplication.shared.backgroundRefreshStatus != .available
+    }
+
+    /// Whether iOS refused to watch one of this block's places (it can't start when you arrive there).
+    func cantWatch(_ id: UUID) -> Bool { failed.contains { $0.hasPrefix(id.uuidString) } }
 
     private func readAccess() {
         let precise = manager.accuracyAuthorization == .fullAccuracy
@@ -80,7 +108,7 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
             upgradeNext = true
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
-            UserDefaults.standard.set(true, forKey: Self.askedAlwaysKey)
+            markAskedAlways()
             manager.requestAlwaysAuthorization()
         default:
             break
@@ -118,6 +146,8 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
             }
             wanted[region.identifier] = nil          // already watched as it should be
         }
+        // a failure counts until that place is tried again (below) or isn't wanted any more
+        failed = failed.filter { wanted[$0] != nil }
         guard manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse else { return }
         for region in wanted.values { manager.startMonitoring(for: region) }
     }
@@ -136,7 +166,7 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
         readAccess()
         if manager.authorizationStatus == .authorizedWhenInUse, upgradeNext {
             upgradeNext = false
-            UserDefaults.standard.set(true, forKey: Self.askedAlwaysKey)
+            markAskedAlways()
             manager.requestAlwaysAuthorization()
         } else if manager.authorizationStatus != .notDetermined {
             upgradeNext = false
@@ -145,6 +175,7 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func locationManager(_ manager: CLLocationManager, didStartMonitoringFor region: CLRegion) {
+        failed.remove(region.identifier)
         // a new place: if you're already there, the block starts now
         manager.requestState(for: region)
     }
@@ -168,6 +199,8 @@ final class PlaceWatcher: NSObject, ObservableObject, CLLocationManagerDelegate 
 
     func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
         Diag.log("place monitoring failed for \(region?.identifier.prefix(8) ?? "?"): \(error)")
+        // shown on the block (otherwise it would wait for an arrival that never comes)
+        if let id = region?.identifier { failed.insert(id) }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {

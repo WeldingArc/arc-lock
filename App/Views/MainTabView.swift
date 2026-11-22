@@ -28,6 +28,7 @@ struct MainTabView: View {
             switch Demo.shot {
             case "blocknow": showBlockNow = true
             case "session-sheet": showSession = true
+            case "toast": model.toast = String(localized: "Strict lock is off. Blocks running now stay strict until they reset or end.")
             default: break
             }
         }
@@ -94,6 +95,8 @@ struct SessionSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var confirmStop = false
+    /// Why Stop was refused, shown by this sheet itself (see problemAlert).
+    @State private var refusal: String?
 
     var body: some View {
         NavigationStack {
@@ -112,7 +115,8 @@ struct SessionSheet: View {
                         }
                     } footer: {
                         Text(model.canStopSession ? "Strict lock is off for this Block now, so it can be stopped."
-                                                  : "This Block now has Strict lock, so it can't be stopped. It ends on its own.")
+                             : model.lockInActive ? "You're locked in, so it can't be stopped."
+                             : "This Block now has Strict lock, so it can't be stopped. It ends on its own.")
                     }
                     .listRowBackground(Palette.card)
                 } else {
@@ -127,7 +131,7 @@ struct SessionSheet: View {
             .confirmationDialog(Text("Stop Block now?"), isPresented: $confirmStop, titleVisibility: .visible) {
                 Button("Stop Block now", role: .destructive) {
                     switch model.stopSession() {
-                    case .refused(let why): model.problem = why
+                    case .refused(let why): refusal = why
                     default: model.toast = String(localized: "Block now is stopped."); dismiss()
                     }
                 }
@@ -137,5 +141,6 @@ struct SessionSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationBackground(Palette.night)
+        .problemAlert($refusal)
     }
 }

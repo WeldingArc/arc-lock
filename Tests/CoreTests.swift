@@ -169,6 +169,52 @@ struct CoreTests {
         check(!Plausibility.thresholdIsReal(minutes: 1, countingSince: reg, now: reg.addingTimeInterval(50)), "even a 1-min threshold needs a minute")
         check(Plausibility.thresholdIsReal(minutes: 1, countingSince: reg, now: reg.addingTimeInterval(61)), "1-min threshold after 61 s → real")
 
+        // When the count began. A daily limit counts its whole period, use from before it was saved included
+        // (Josh, 1.1.1: a limit set after its time was used up never locked until its reset).
+        let midnight = date("2026-10-12 00:00", seoul)
+        check(Counting.since(periodStart: midnight, registeredAt: reg, includesPast: true, calendar: seoul) == midnight,
+              "limit saved at 15:00 counts from midnight")
+        check(Counting.since(periodStart: date("2026-10-12 04:30", seoul), registeredAt: reg, includesPast: true, calendar: seoul)
+              == date("2026-10-12 04:00", seoul), "4:30 reset: iOS counts from the round hour before it")
+        check(Counting.since(periodStart: date("2026-10-12 04:00", seoul), registeredAt: nil, includesPast: true, calendar: seoul)
+              == date("2026-10-12 04:00", seoul), "4:00 reset counts from 4:00")
+        check(Counting.since(periodStart: midnight, registeredAt: reg, includesPast: false, calendar: seoul) == reg,
+              "time-out counts from its registration")
+        check(Counting.since(periodStart: midnight, registeredAt: nil, includesPast: false, calendar: seoul) == midnight,
+              "never registered: from the period's start")
+        check(Counting.since(periodStart: midnight, registeredAt: date("2026-10-11 20:00", seoul), includesPast: false, calendar: seoul) == midnight,
+              "registered yesterday: from today's reset")
+        // the case Josh hit: 2 h used, a 30-min limit saved at 15:00 — iOS reports it at once, and that's real
+        let since = Counting.since(periodStart: midnight, registeredAt: reg, includesPast: true, calendar: seoul)
+        check(Plausibility.thresholdIsReal(minutes: 30, countingSince: since, now: reg.addingTimeInterval(2)),
+              "limit used up before it was saved: locks seconds after saving")
+        check(!Plausibility.thresholdIsReal(minutes: 30, countingSince: reg, now: reg.addingTimeInterval(2)),
+              "(the old count from saving ignored it)")
+        // the early-fire guard still holds where the clock rules it out: just after the reset
+        check(!Plausibility.thresholdIsReal(minutes: 30, countingSince: midnight, now: midnight.addingTimeInterval(2)),
+              "a 30-min limit reported 2 s after midnight → ignored")
+        check(!Plausibility.thresholdIsReal(minutes: 30, countingSince: midnight, now: midnight.addingTimeInterval(20 * 60)),
+              "a 30-min limit reported at 00:20 → ignored")
+        check(Plausibility.thresholdIsReal(minutes: 30, countingSince: date("2026-10-12 04:00", seoul), now: date("2026-10-12 04:35", seoul)),
+              "4:30 reset: use from 4:00 counts, so 30 min at 4:35 can be real")
+        // which limits count their earlier use
+        check(Counting.includesPast(resetAt: .midnight, freshUntil: nil, now: reg), "midnight reset counts the whole day")
+        check(Counting.includesPast(resetAt: TimeOfDay(4, 0), freshUntil: nil, now: reg), "4:00 reset too")
+        check(!Counting.includesPast(resetAt: TimeOfDay(4, 30), freshUntil: nil, now: reg), "4:30 reset (saved by 1.1.0) counts from registration")
+        check(!Counting.includesPast(resetAt: .midnight, freshUntil: reg.addingTimeInterval(3600), now: reg),
+              "reset time just changed: counts from the change until its first reset")
+        check(Counting.includesPast(resetAt: .midnight, freshUntil: reg, now: reg), "from that reset on: the whole day again")
+        // the double count a reset change could cause (4:00 → midnight lands Tue 4:00; Tue 0:00–1:00 already counted)
+        let tue4 = date("2026-10-13 04:00", seoul)
+        let fresh = Period.end(after: tue4, resetAt: .midnight, calendar: seoul)
+        check(fresh == date("2026-10-14 00:00", seoul), "fresh count lasts until the new reset (Wed 0:00)")
+        let landed = Counting.since(periodStart: Period.start(containing: tue4.addingTimeInterval(5), resetAt: .midnight, calendar: seoul),
+                                    registeredAt: tue4,
+                                    includesPast: Counting.includesPast(resetAt: .midnight, freshUntil: fresh, now: tue4.addingTimeInterval(5)),
+                                    calendar: seoul)
+        check(landed == tue4 && !Plausibility.thresholdIsReal(minutes: 60, countingSince: landed, now: tue4.addingTimeInterval(5)),
+              "a 60-min limit reported right after the change lands is ignored (no double count)")
+
         // Never-ending schedules are refused (a block must leave time to be changed)
         let allDay = RulePlan(name: "All", kind: .schedule, start: TimeOfDay(0, 0), end: TimeOfDay(0, 0), days: Set(1...7))
         check(Validate.problems(allDay, appCount: 1, hasSelection: true).contains(.windowTooLong), "00:00→00:00 (24 h) refused")

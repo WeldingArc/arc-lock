@@ -121,6 +121,8 @@ public enum Limits {
     public static let placeRadius = 100.0...1000.0
     public static let defaultPlaceRadius = 150.0
     public static let placeMinutes = 15...(12 * 60)
+    /// Lock-in: 1 to 14 days (Josh, 1.1.1: a month was too much). A longer one saved by an older version still runs out.
+    public static let lockInDays = 1...14
     /// A place block set to end when you leave ends after this long at the latest (location off, a missed exit).
     public static let placeSafetyMinutes = 12 * 60
     /// iOS watches at most 20 places (regions) for an app, across all its place blocks.
@@ -780,5 +782,26 @@ public enum Plausibility {
     public static func thresholdIsReal(minutes: Int, countingSince: Date, now: Date) -> Bool {
         let elapsed = now.timeIntervalSince(countingSince)
         return elapsed >= max(TimeInterval(minutes * 60) - 15, Limits.minimumEventDelay)
+    }
+}
+
+/// When iOS's count toward a block's usage thresholds began.
+public enum Counting {
+    /// Whether a daily limit's monitor counts use from before it's registered — its whole period, so a limit saved or
+    /// made stricter after its time is used up locks at once. Not while `freshUntil` is ahead (its reset time just
+    /// changed: that new day can overlap the old one, whose use already counted), and not with a reset off the hour
+    /// (iOS would count from the round hour before it: use that belongs to the previous day). Those count from
+    /// registration, like a time-out.
+    public static func includesPast(resetAt: TimeOfDay, freshUntil: Date?, now: Date) -> Bool {
+        resetAt.minute == 0 && (freshUntil ?? .distantPast) <= now
+    }
+
+    /// `includesPast` = the monitor counts use from before it was registered (a daily limit: its whole period, so one
+    /// saved or changed after its time is used up locks at once). iOS counts that from the start of the hour the
+    /// period began in (Apple: from "the start of the nearest round hour" when a schedule starts off the hour).
+    /// Otherwise (a time-out) the count began at the last (re-)registration, at the earliest at the period's start.
+    public static func since(periodStart: Date, registeredAt: Date?, includesPast: Bool, calendar: Calendar) -> Date {
+        if includesPast { return calendar.dateInterval(of: .hour, for: periodStart)?.start ?? periodStart }
+        return max(periodStart, registeredAt ?? .distantPast)
     }
 }

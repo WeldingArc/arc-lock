@@ -41,7 +41,7 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             case .place:
                 if h.until == .distantFuture {
                     title = L("Locked while you're here")
-                    reason = L("This block ends when you leave.")
+                    reason = L("This block ends when you leave. If you've left, open Arc Lock to refresh.")
                 } else {
                     title = L("Locked until %@", when)
                     reason = L("This block ends on its own.")

@@ -5,8 +5,12 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var page = 0
     @State private var asking = false
+    /// The page, kept in the model: a new text size redraws every screen, and setup must stay where it was.
+    private var page: Int {
+        get { model.setupPage }
+        nonmutating set { model.setupPage = newValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,18 +37,28 @@ struct OnboardingView: View {
             }
             // back from iOS's Screen Time sheet (or Settings): the button works again; go on if access was granted
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .active, page == 2 else { return }
+                guard phase == .active, page == 2, !isDemo else { return }
                 asking = false
                 if model.recheckScreenTime() { page = 3 } else { watchForAccess(seconds: 4) }
             }
             #if DEBUG
             .onAppear {
+                if Demo.shot == "onboarding-how" { page = 1 }
                 if Demo.shot == "onboarding-access" { page = 2 }
                 if Demo.shot == "onboarding-notifications" { page = 3 }
             }
             #endif
             dots.padding(.bottom, 18)
         }
+    }
+
+    /// Demo screenshots stay on the page they ask for (demo access always counts as granted).
+    private var isDemo: Bool {
+        #if DEBUG
+        return Demo.isOn
+        #else
+        return false
+        #endif
     }
 
     private var dots: some View {
@@ -60,10 +74,7 @@ struct OnboardingView: View {
     private func screen<Content: View>(@ViewBuilder content: () -> Content, button: LocalizedStringKey,
                                        secondary: LocalizedStringKey? = nil, waits: Bool = false, action: @escaping () -> Void,
                                        secondaryAction: (() -> Void)? = nil) -> some View {
-        VStack(spacing: 22) {
-            Spacer(minLength: 20)
-            content()
-            Spacer(minLength: 20)
+        let buttons = VStack(spacing: 22) {
             Button(action: action) {
                 // while iOS is asking, show that it's waiting (the button works again once iOS's sheet closes)
                 if waits && asking { ProgressView().tint(Palette.night) } else { Text(button) }
@@ -73,6 +84,30 @@ struct OnboardingView: View {
             .opacity(waits && asking ? 0.6 : 1)
             if let secondary, let secondaryAction {
                 Button(secondary, action: secondaryAction).font(.p(16, .regular)).foregroundStyle(Palette.muted).frame(minHeight: 44)
+            }
+        }
+        return ViewThatFits(in: .vertical) {
+            // the page as designed, when it fits
+            VStack(spacing: 22) {
+                Spacer(minLength: 20)
+                content()
+                Spacer(minLength: 20)
+                buttons
+            }
+            // very large text: the words scroll and the button stays on screen
+            ScrollView {
+                VStack(spacing: 22) { content() }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom) {
+                buttons
+                    .padding(.top, 18)
+                    .frame(maxWidth: .infinity)
+                    // the words scrolled under the button fade out instead of showing through
+                    .background(LinearGradient(colors: [Palette.night.opacity(0), Palette.night],
+                                               startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.3)))
             }
         }
         .multilineTextAlignment(.center)
