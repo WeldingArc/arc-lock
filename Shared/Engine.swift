@@ -67,12 +67,14 @@ struct Registration: Codable, Equatable {
     /// registrations saved before 1.1.1, which count from the registration only.
     var pastActivity: Bool? = nil
 
-    /// Whether this registration serves `wanted`: the same rule, thresholds and apps. How it counts (`pastActivity`)
-    /// only matters in the period it was registered in — from every later reset on, any registration counts the whole
-    /// period (`countingSince` agrees). So a monitor is never registered again for that alone: not on the update from
-    /// 1.1.0 (its limits count whole periods from their next reset), not when a fresh count ends. Such a re-registration
-    /// would come at the first use after the reset, and restart the count with hours the clock check can't rule out.
+    /// Whether this registration serves `wanted`: the same rule, thresholds and apps, counted the same way. A daily limit
+    /// that should count its whole day (`wanted.pastActivity` true) but was registered to count from registration — by
+    /// 1.1.0 or earlier (nil), or for the rest of the day its reset time changed (false, FreshCounts) — is registered
+    /// again: iOS can stop reporting such a count altogether (Josh's iPhone, 2026-11-23: a 45-min limit from the day
+    /// before, Instagram well past it, not one report). Registered anew it counts the whole day, so a limit already
+    /// used up locks at once; the saved registration then counts the whole day, so this happens once.
     func serves(_ wanted: Registration) -> Bool {
+        if pastActivity != true && wanted.pastActivity == true { return false }
         var mine = self
         mine.pastActivity = wanted.pastActivity
         return mine == wanted

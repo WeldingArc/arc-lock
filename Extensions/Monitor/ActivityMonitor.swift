@@ -20,8 +20,8 @@ final class ActivityMonitor: DeviceActivityMonitor {
         let (state, changed) = Engine.housekeep()
         guard state.isSetUp else { return }
         // The daily monitor, and a block's own reset (its interval start), register again what changed for the new
-        // period (a change applied at the reset). How a monitor counts doesn't need it: from each reset on, every
-        // registration counts the whole period (Registration.serves).
+        // period: a change applied at the reset, or a limit that counted from registration only because its reset time
+        // had just changed and now counts whole days again (Registration.serves).
         if activity == Names.daily || Names.ruleID(activity) != nil || changed { Monitoring.sync(state) }
         Monitoring.finishBreaks(state)
         Engine.reconcile(state)
