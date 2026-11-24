@@ -38,8 +38,17 @@ struct LockInConfirm: View {
                                                                     : "Arc Lock can't be deleted, and neither can any other app on this iPhone.")
                                 point("lock.shield", "This setting can't be changed: the lock-in can only be made longer, never shorter or turned off, and Strict lock stays on until it ends.")
                                 point("lock", "Blocks you stopped start again, and none can be stopped, loosened or deleted. You can only add apps and websites to them.")
-                                point("calendar", "It can't be ended early. It ends on its own after \(through).")
-                                point("lifepreserver", "Emergency relief still works: once every \(ReliefRules.refillDays) days it lifts your blocks for \(ReliefRules.minutes) minutes. The lock-in itself stays on.")
+                                // emergency relief is a setting, off by default: only when it's on does it work during a
+                                // lock-in (one waiting to switch on waits for the lock-in too)
+                                if model.state.reliefEnabled {
+                                    point("calendar", "It can't be ended early. It ends on its own after \(through).")
+                                    point("lifepreserver", "Emergency relief still works: once every \(ReliefRules.refillDays) days it lifts your blocks for \(ReliefRules.minutes) minutes. The lock-in itself stays on.")
+                                } else {
+                                    point("calendar", "There's no early exit. It ends on its own after \(through).")
+                                    if model.state.reliefOnAt != nil {
+                                        point("lifepreserver", "Emergency relief isn't on yet, so it won't work during the lock-in. It turns on once the lock-in is over.")
+                                    }
+                                }
                                 point("plus.circle", "You can still add new blocks.")
                             }
                         }

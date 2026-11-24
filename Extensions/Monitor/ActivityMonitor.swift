@@ -154,7 +154,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
                 Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule, now: now), now: now)
             }
             let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
-            if Relief.isActive(now: now), let back = Relief.until, back < reset {
+            if state.reliefEnabled, Relief.isActive(now: now), let back = Relief.until, back < reset {
                 Notify.post(id: "reached.\(id)", title: rule.plan.displayName,
                             body: L("This limit is used up. It locks when emergency relief ends, at %@.", Fmt.time(back)))
             } else {

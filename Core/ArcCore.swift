@@ -138,6 +138,8 @@ public enum Limits {
     /// DeviceActivity monitors at most 20 activities per app (and its extensions): rules + Block now + housekeeping.
     public static let maxActivities = 20
     public static let reservedActivities = 2
+    /// The emergency relief's one-off monitor (1.2.1): kept free only while relief is switched on in Settings.
+    public static let reliefActivities = 1
     /// A limit's thresholds can't be real sooner than this after counting starts (iOS sometimes fires right after
     /// a monitor is registered — a known bug — and use can't outrun the clock).
     public static let minimumEventDelay: TimeInterval = 60
@@ -707,11 +709,14 @@ public enum Capacity {
     }
     /// Rules that may exist at all (each keeps one store slot).
     public static var maxRules: Int { Limits.maxActivities - Limits.reservedActivities }
-    /// Whether these blocks fit in iOS's 20 monitors (with Block now and the midnight housekeeping). `reserved` =
-    /// saved blocks this version can't read (kept as they are, see Shared `ArcState.unreadRules`): each may come back
-    /// and need a slot and two monitors.
-    public static func fits(_ plans: [RulePlan], reserved: Int = 0) -> Bool {
-        plans.count + reserved <= maxRules && activities(for: plans) + 2 * reserved <= maxRules
+    /// Rules that may exist with emergency relief switched on (`relief`): its monitor stays free, so one fewer (17).
+    public static func maxRules(relief: Bool) -> Int { maxRules - (relief ? Limits.reliefActivities : 0) }
+    /// Whether these blocks fit in iOS's 20 monitors (with Block now and the midnight housekeeping, and with the
+    /// emergency relief's monitor when `relief` is on). `reserved` = saved blocks this version can't read (kept as they
+    /// are, see Shared `ArcState.unreadRules`): each may come back and need a slot and two monitors.
+    public static func fits(_ plans: [RulePlan], reserved: Int = 0, relief: Bool = false) -> Bool {
+        let most = maxRules(relief: relief)
+        return plans.count + reserved <= most && activities(for: plans) + 2 * reserved <= most
     }
 }
 
@@ -849,6 +854,7 @@ public enum Counting {
 /// One emergency relief: every block's shields lift for `minutes`, then come back on their own. The next one comes
 /// `refillDays` after the last one started, and at most one is ever waiting (Josh, 1.2.1). It changes no rule, no
 /// lock-in and no setting: deletion protection and the clock lock stay as they are, and use still counts.
+/// It's a setting, off by default (also for anyone updating): see `switchOn`.
 public enum ReliefRules {
     public static let minutes = 30
     public static let refillDays = 30
@@ -886,5 +892,34 @@ public enum ReliefRules {
         if let next, !isAvailable(next: next, now: now) { return .notYet(next) }
         if !anythingBlocked { return .nothingBlocked }
         return nil
+    }
+
+    /// Switching emergency relief on in Settings (Josh, 1.2.1: off by default) loosens things, so it waits like every
+    /// loosening: never during a lock-in, and only once the strict blocks running or counting now have reset or ended
+    /// (`strictHoldsEnd`, nil when none is). Its monitor needs one block's place (`fits`: Capacity with `relief: true`).
+    /// Switching it off always applies at once.
+    public enum SwitchOn: Equatable, Sendable {
+        /// On right away.
+        case now
+        /// On once the strict blocks running or counting now have reset or ended.
+        case at(Date)
+        /// Not during a lock-in, which lasts until then.
+        case lockedIn(until: Date)
+        /// Too many blocks: one must go first.
+        case full
+    }
+
+    public static func switchOn(lockInUntil: Date?, strictHoldsEnd: Date?, fits: Bool, now: Date) -> SwitchOn {
+        if let until = lockInUntil, Policy.lockInActive(until, now: now) { return .lockedIn(until: until) }
+        if !fits { return .full }
+        if let at = strictHoldsEnd, at > now { return .at(at) }
+        return .now
+    }
+
+    /// Whether a switch-on waiting until `at` applies at `now`: its time has come (one within `edge` counts, so a
+    /// callback a moment early still applies it) and no lock-in holds it back.
+    public static func switchOnDue(_ at: Date?, lockInUntil: Date?, now: Date, edge: TimeInterval = 60) -> Bool {
+        guard let at else { return false }
+        return at.timeIntervalSince(now) <= edge && !Policy.lockInActive(lockInUntil, now: now)
     }
 }

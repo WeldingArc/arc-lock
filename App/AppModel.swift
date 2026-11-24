@@ -212,10 +212,19 @@ final class AppModel: ObservableObject {
         #endif
         return PlaceVisits.get(r.id)?.inside ?? false
     }
-    /// Every block keeps a monitor and a store slot; iOS allows an app 20 monitors, so Arc Lock keeps up to 18 blocks.
+    /// Every block keeps a monitor and a store slot; iOS allows an app 20 monitors, so Arc Lock keeps up to 18 blocks
+    /// (17 while emergency relief is on: its monitor keeps one block's place).
     var canAddRule: Bool { canAdd(.limit) }
     func canAdd(_ kind: RuleKind) -> Bool {
-        Capacity.fits(state.rules.map(\.plan) + [RulePlan(kind: kind)], reserved: state.unreadRules.count)
+        Capacity.fits(state.rules.map(\.plan) + [RulePlan(kind: kind)], reserved: state.unreadRules.count, relief: state.reliefKeepsSlot)
+    }
+    /// The blocks as they count toward iOS's monitors: a change waiting for its reset counts too, if it needs more
+    /// monitors than the running version. `except` = the block being saved.
+    private func capacityPlans(except id: UUID? = nil) -> [RulePlan] {
+        state.rules.filter { $0.id != id }.map { r -> RulePlan in
+            guard let p = r.pending?.plan, Capacity.activities(for: [p]) > Capacity.activities(for: [r.plan]) else { return r.plan }
+            return p
+        }
     }
 
     /// Blocks holding something right now, soonest end first. A place block running until you leave has no end:
@@ -316,6 +325,8 @@ final class AppModel: ObservableObject {
             || places.contains { newlyDue(PlaceRules.latestEnd(PlaceVisits.get($0.id), now: previous)) }
             // an emergency relief's end, a moment early as everywhere (Engine.edge): its shields come back
             || newlyDue(Relief.until?.addingTimeInterval(-Engine.edge))
+            // emergency relief switched on while strict blocks ran: it turns on now
+            || newlyDue(state.reliefOnAt)
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
@@ -478,12 +489,13 @@ final class AppModel: ObservableObject {
                 return .refused(String(localized: "Together your schedules would leave less than an hour a day free. Keep a free hour, so you can always open Arc Lock and change them."))
             }
         }
-        // a change waiting for its reset counts too, if it needs more of iOS's monitors than the running version
-        let others = state.rules.filter { $0.id != id }.map { r -> RulePlan in
-            guard let p = r.pending?.plan, Capacity.activities(for: [p]) > Capacity.activities(for: [r.plan]) else { return r.plan }
-            return p
-        }
-        guard Capacity.fits(others + [plan], reserved: id == nil ? state.unreadRules.count : 0) else {
+        // a change waiting for its reset counts too, if it needs more of iOS's monitors than the running version; while
+        // emergency relief is on (or waiting to switch on), its monitor keeps one block's place
+        let others = capacityPlans(except: id)
+        guard Capacity.fits(others + [plan], reserved: id == nil ? state.unreadRules.count : 0, relief: state.reliefKeepsSlot) else {
+            if state.reliefKeepsSlot {
+                return .refused(String(localized: "iOS lets one app watch only so many blocks: up to \(Capacity.maxRules(relief: true)) while emergency relief is on, and a time-out counts as two. Delete one first, or turn emergency relief off."))
+            }
             return .refused(String(localized: "iOS lets one app watch only so many blocks: up to \(Capacity.maxRules), and a time-out counts as two. Delete one first."))
         }
         if plan.kind == .place {
@@ -709,7 +721,7 @@ final class AppModel: ObservableObject {
         Shielding.apply(selection, domains: domains, to: Names.sessionStore, hold: state.isStrict(session, now: now), now: now)
         do { try Monitoring.startSession(session) } catch { problem = Self.describe(error) }
         // an emergency relief lifts this one too: it covers its apps once the relief is over
-        if Relief.isActive(now: now), let back = Relief.until {
+        if reliefActive, let back = Relief.until {
             toast = String(localized: "Block now starts when emergency relief ends, at \(Fmt.time(back)).")
         }
         return .saved
@@ -735,8 +747,45 @@ final class AppModel: ObservableObject {
 
     // MARK: emergency relief
 
+    /// The emergency relief setting (Josh, 1.2.1: off by default, also for anyone updating). Switching on loosens
+    /// things, so it waits like deletion protection's switch-off: never during a lock-in, and only once each strict block
+    /// running or counting now has reset or ended (its own time). Its monitor needs one block's place, so it's refused
+    /// with more than 17 blocks. Switching off applies now: it cancels a switch-on that's waiting and ends a running
+    /// relief, so the shields come back at once. When the next relief comes stays as it is: switching off and on again
+    /// gives no new one.
+    func setRelief(_ on: Bool) -> Outcome {
+        if !demo { now = Date() }
+        guard on else {
+            if !demo, Relief.until != nil {
+                Relief.close()                                          // commit's reconcile shields everything again
+                DeviceActivityCenter().stopMonitoring([Names.relief])
+            }
+            commit { $0.reliefEnabled = false; $0.reliefOnAt = nil }
+            return .saved
+        }
+        if state.reliefEnabled {
+            if state.reliefOnAt != nil { commit { $0.reliefOnAt = nil } }
+            return .saved
+        }
+        let fits = Capacity.fits(capacityPlans(), reserved: state.unreadRules.count, relief: true)
+        // a strict place block running until you leave holds it too, until its latest end: a relief would lift it
+        let holds = state.strictHoldsEnd(now: now, calendar: calendar, status: { self.status($0) }, untilLeave: true)
+        switch ReliefRules.switchOn(lockInUntil: state.lockInUntil, strictHoldsEnd: holds, fits: fits, now: now) {
+        case .lockedIn(let until):
+            return .refused(Self.lockInSettingMessage(until: until))
+        case .full:
+            return .refused(String(localized: "Emergency relief takes one block's place, so with it on you can have up to \(Capacity.maxRules(relief: true)) blocks. Delete a block first."))
+        case .at(let at):
+            commit { $0.reliefOnAt = at }
+            return .scheduled(at)
+        case .now:
+            commit { $0.reliefEnabled = true; $0.reliefOnAt = nil }
+            return .saved
+        }
+    }
+
     /// Whether an emergency relief is lifting every block right now (Shared Relief, Core ReliefRules).
-    var reliefActive: Bool { !demo && Relief.isActive(now: now) }
+    var reliefActive: Bool { !demo && state.reliefEnabled && Relief.isActive(now: now) }
     /// When the running relief's blocks come back.
     var reliefUntil: Date? { reliefActive ? Relief.until : nil }
     /// When the next relief can be used, while the last one is less than 30 days old (nil: one is waiting).
@@ -749,6 +798,7 @@ final class AppModel: ObservableObject {
 
     /// Why an emergency relief can't start now, or nil when it can (asked before the warning and the hold).
     func reliefRefusal() -> String? {
+        guard state.reliefEnabled else { return String(localized: "Emergency relief is off. You can turn it on in Settings.") }
         switch ReliefRules.refusal(until: Relief.until, next: Relief.next, anythingBlocked: !blockingNow.isEmpty,
                                    now: Date(), edge: Engine.edge) {
         case .running(let until)?:

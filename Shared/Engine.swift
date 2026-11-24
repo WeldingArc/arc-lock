@@ -262,8 +262,9 @@ enum Monitoring {
             $0.plan.isOn && $0.plan.kind == .place && PlaceRules.isRunning(PlaceVisits.get($0.id), now: now)
         }
         let livePlaces = Set(runningPlaces.map { Names.placeActivity($0.id) })
-        // a running emergency relief keeps its one-off end monitor: its end brings the shields back
-        let reliefLive = (Relief.until ?? .distantPast) > now
+        // a running emergency relief keeps its one-off end monitor: its end brings the shields back. With the setting
+        // off there's none to keep (switching it off ends a running one).
+        let reliefLive = state.reliefEnabled && (Relief.until ?? .distantPast) > now
         // stale monitors go first: at iOS's 20-monitor cap a missing one couldn't start before they're gone
         let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
             && !livePlaces.contains($0) && !(reliefLive && $0 == Names.relief) && !Diag.probeNames.contains($0) }
@@ -439,6 +440,9 @@ enum Engine {
         // a state that isn't set up may be one that couldn't be read (ArcState.isSetUp): clearing every store for it
         // would lift every block, the lock-in and deletion protection. Everything stays as it is until a real read.
         guard state.isSetUp else { return }
+        // emergency relief switched off in Settings: none lifts anything (switching it off ends a running one; this
+        // also covers a relief saved before the setting existed)
+        if !state.reliefEnabled, Relief.until != nil { Relief.close() }
         for slot in 0..<Names.slotCount {
             let name = Names.store(slot: slot)
             guard let rule = state.rules.first(where: { state.slot(of: $0.id) == slot }) else {
@@ -511,6 +515,12 @@ enum Engine {
                 s.deletionProtection = false
                 s.deletionProtectionOffAt = nil
             }
+            // emergency relief switched on while strict blocks ran: on once they have reset or ended (a lock-in
+            // started since holds it until it's over)
+            if ReliefRules.switchOnDue(s.reliefOnAt, lockInUntil: s.lockInUntil, now: now, edge: edge) {
+                s.reliefEnabled = true
+                s.reliefOnAt = nil
+            }
             // a switch-off saved by an older version (it waited for midnight) applies the new way: each strict block
             // keeps its lock until its own reset or the end of its run
             if s.strictLock, s.strictLockOffAt != nil, (s.lockInUntil ?? .distantPast) <= now {
@@ -531,7 +541,7 @@ enum Engine {
         let (due, moved) = tidy(&probe)
         guard !due.isEmpty || moved || probe.session != st.session || probe.lockInUntil != st.lockInUntil
               || probe.deletionProtection != st.deletionProtection || probe.strictLock != st.strictLock
-              || probe.strictUntil != st.strictUntil else { return (st, false) }
+              || probe.strictUntil != st.strictUntil || probe.reliefEnabled != st.reliefEnabled else { return (st, false) }
         st = StateStore.update { fresh in
             let before = fresh.rules
             let (ids, _) = tidy(&fresh)

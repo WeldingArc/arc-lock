@@ -49,7 +49,8 @@ struct HomeTab: View {
                     }
                     .listRowBackground(Palette.card)
                 }
-                if model.reliefActive || !blocks.isEmpty { reliefSection }
+                // emergency relief is a setting, off by default (Settings): nothing about it shows until it's on
+                if model.state.reliefEnabled && (model.reliefActive || !blocks.isEmpty) { reliefSection }
                 Section {
                     Button { showLockIn = true } label: {
                         HStack(spacing: 12) {
@@ -70,7 +71,8 @@ struct HomeTab: View {
                     .buttonStyle(.plain)
                 } footer: {
                     Text(model.lockInActive ? "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks, apps and websites."
-                                            : "Freeze every rule for days. It can't be ended early.")
+                                            : (model.state.reliefEnabled ? "Freeze every rule for days. It can't be ended early."
+                                                                         : "Freeze every rule for days. No early exit."))
                 }
                 .listRowBackground(Palette.card)
                 if let next = model.nextStart {
@@ -112,8 +114,9 @@ struct HomeTab: View {
         }
     }
 
-    /// Emergency relief (AppModel.startRelief): while blocks hold something, once every 30 days, lift them all for
-    /// 30 minutes. While one runs: when the blocks come back. After: when the next one can be used.
+    /// Emergency relief (AppModel.startRelief), shown only while it's switched on in Settings: while blocks hold
+    /// something, once every 30 days, lift them all for 30 minutes. While one runs: when the blocks come back. After:
+    /// when the next one can be used.
     private var reliefSection: some View {
         Section {
             if let until = model.reliefUntil {

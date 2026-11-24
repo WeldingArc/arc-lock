@@ -708,6 +708,37 @@ struct CoreTests {
         let springAhead = ReliefRules.plan(startingAt: date("2027-03-01 09:00", newYork), calendar: newYork)
         check(springAhead.next == date("2027-03-31 09:00", newYork), "30 calendar days across a clock change keep the time of day")
 
+        // Emergency relief is a setting, off by default (1.2.1): while on, its monitor takes one block's place
+        check(Capacity.maxRules(relief: false) == 18 && Capacity.maxRules(relief: true) == 17, "18 blocks with relief off, 17 with it on")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 18)), "relief off: 18 limits still fit")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 18), relief: true), "relief on: 18 limits don't")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 17), relief: true), "relief on: 17 limits fit")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 17) + [offShorts], relief: true), "relief on: a switched-off block still keeps its place")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 16) + [shorts], relief: true), "relief on: 16 limits and a time-out need 18 monitors, too many")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 15) + [shorts], relief: true), "relief on: 15 limits and a time-out fit")
+        check(Capacity.fits(Array(repeating: shorts, count: 8) + [limitPlan], relief: true), "relief on: 8 time-outs and a limit fit")
+        check(!Capacity.fits(Array(repeating: shorts, count: 9), relief: true), "relief on: 9 time-outs don't")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 16), reserved: 1, relief: true), "relief on: an unreadable block kept counts too")
+        let onNoon = date("2026-11-25 12:00", seoul), onFive = date("2026-11-25 17:00", seoul)
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: nil, fits: true, now: onNoon) == .now, "no strict block running: on right away")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onFive, fits: true, now: onNoon) == .at(onFive),
+              "a strict block running until 5 PM: on at 5 PM")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onNoon, fits: true, now: onNoon) == .now, "a hold ending now: on right away")
+        let onLockIn = date("2026-11-28 00:00", seoul)
+        check(ReliefRules.switchOn(lockInUntil: onLockIn, strictHoldsEnd: nil, fits: true, now: onNoon) == .lockedIn(until: onLockIn),
+              "never switched on during a lock-in")
+        check(ReliefRules.switchOn(lockInUntil: onNoon.addingTimeInterval(-60), strictHoldsEnd: nil, fits: true, now: onNoon) == .now,
+              "a lock-in that's over doesn't hold it")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onFive, fits: false, now: onNoon) == .full,
+              "too many blocks: one must go first, before any waiting")
+        check(!ReliefRules.switchOnDue(nil, lockInUntil: nil, now: onNoon), "nothing waiting: nothing to apply")
+        check(!ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: onNoon), "waiting for 5 PM: not at noon")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: onFive.addingTimeInterval(-30)), "a callback 30 s early still applies it (edge)")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: date("2026-11-25 18:00", seoul)), "applied once its time has passed")
+        check(!ReliefRules.switchOnDue(onFive, lockInUntil: onLockIn, now: date("2026-11-26 09:00", seoul)),
+              "a lock-in started since holds it until it ends")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: onLockIn, now: onLockIn), "…and it applies once the lock-in is over")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

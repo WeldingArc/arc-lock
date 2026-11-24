@@ -1276,6 +1276,26 @@
         }
       }
     },
+    "Emergency relief is off. You can turn it on in Settings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제가 꺼져 있습니다. 설정에서 켤 수 있습니다."
+          }
+        }
+      }
+    },
+    "Emergency relief is off. Your blocks are back on.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제를 껐습니다. 차단이 다시 적용되었습니다."
+          }
+        }
+      }
+    },
     "Emergency relief is over": {
       "extractionState": "manual",
       "localizations": {
@@ -1283,6 +1303,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "긴급 해제가 끝났습니다"
+          }
+        }
+      }
+    },
+    "Emergency relief isn't on yet, so it won't work during the lock-in. It turns on once the lock-in is over.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제가 아직 켜지지 않아 규칙 고정 중에는 쓸 수 없습니다. 규칙 고정이 끝나면 켜집니다."
           }
         }
       }
@@ -1299,6 +1329,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "긴급 해제는 계속 쓸 수 있습니다. %1$lld일마다 한 번 차단을 %2$lld분 동안 해제하며, 규칙 고정은 그대로 유지됩니다."
+          }
+        }
+      }
+    },
+    "Emergency relief takes one block's place, so with it on you can have up to %lld blocks. Delete a block first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제는 차단 하나의 자리를 차지하므로, 켜 두면 차단은 최대 %lld개까지 만들 수 있습니다. 차단 하나를 먼저 삭제하세요."
+          }
+        }
+      }
+    },
+    "Emergency relief turns on at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제가 %@에 켜집니다."
           }
         }
       }
@@ -1403,6 +1453,16 @@
         }
       }
     },
+    "For the days you choose, no rule can be loosened, stopped or deleted (you can only add to them), and no app can be deleted. There is no early exit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 기간에는 규칙을 완화하거나 중지하거나 삭제할 수 없고(추가만 할 수 있습니다), 앱도 삭제할 수 없습니다. 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
+          }
+        }
+      }
+    },
     "Forest": {
       "localizations": {
         "ko": {
@@ -1439,6 +1499,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "며칠 동안 모든 규칙을 고정합니다. 중간에 끝낼 수 없습니다."
+          }
+        }
+      }
+    },
+    "Freeze every rule for days. No early exit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "며칠 동안 모든 규칙을 고정합니다. 중간에 해제할 수 없습니다."
           }
         }
       }
@@ -1640,6 +1710,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "계속 누르고 계세요…"
+          }
+        }
+      }
+    },
+    "Keep it off": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "꺼 두기"
           }
         }
       }
@@ -2239,6 +2319,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "꺼짐: 차단을 언제든 중지하거나 변경할 수 있습니다. 다만 강제 잠금을 끌 때 실행 중이거나 사용 시간을 계산 중인 차단은 각각 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다. 규칙 고정을 사용하려면 강제 잠금을 켜야 합니다."
+          }
+        }
+      }
+    },
+    "Once every %lld days, lift every block for %lld minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. Turning it on waits until your strict blocks running or counting now reset or end. While it's on, you can have up to %lld blocks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Once every %1$lld days, lift every block for %2$lld minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. Turning it on waits until your strict blocks running or counting now reset or end. While it's on, you can have up to %3$lld blocks."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld일마다 한 번, 홈에서 모든 차단을 %2$lld분 동안 해제할 수 있습니다. 강제 잠금 차단과 규칙 고정 중에도 쓸 수 있으며, 앱과 웹사이트만 열립니다. 지금 실행 중이거나 사용 시간을 계산 중인 강제 잠금 차단이 있으면 해당 차단이 초기화되거나 끝난 뒤에 켜집니다. 켜 두면 차단은 최대 %3$lld개까지 만들 수 있습니다."
+          }
+        }
+      }
+    },
+    "Once every %lld days, lift every block for %lld minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. While it's on, you can have up to %lld blocks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Once every %1$lld days, lift every block for %2$lld minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. While it's on, you can have up to %3$lld blocks."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld일마다 한 번, 홈에서 모든 차단을 %2$lld분 동안 해제할 수 있습니다. 강제 잠금 차단과 규칙 고정 중에도 쓸 수 있으며, 앱과 웹사이트만 열립니다. 켜 두면 차단은 최대 %3$lld개까지 만들 수 있습니다."
           }
         }
       }
@@ -3091,6 +3203,16 @@
         }
       }
     },
+    "There's no early exit. It ends on its own after %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "중간에 해제할 수 없습니다. %@까지 이어진 뒤 자동으로 끝납니다."
+          }
+        }
+      }
+    },
     "These blocks were saved before an update, but they're not in your list anymore. If you didn't delete them yourself, restore them here.": {
       "localizations": {
         "ko": {
@@ -3474,6 +3596,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@에 꺼짐"
+          }
+        }
+      }
+    },
+    "Turns on at %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 켜짐"
           }
         }
       }
@@ -3941,6 +4073,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "iOS에서 감시할 수 있는 차단 수가 가득 차서 긴급 해제가 끝나는 시간을 설정하지 못했습니다. 아무것도 해제되지 않았습니다."
+          }
+        }
+      }
+    },
+    "iOS lets one app watch only so many blocks: up to %lld while emergency relief is on, and a time-out counts as two. Delete one first, or turn emergency relief off.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제를 켜 두면 iOS에서 한 앱에 설정할 수 있는 차단은 최대 %lld개입니다. 타임아웃 하나는 2개로 계산됩니다. 차단 하나를 먼저 삭제하거나 긴급 해제를 끄세요."
           }
         }
       }
