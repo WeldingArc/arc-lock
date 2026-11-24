@@ -67,6 +67,11 @@ struct ArcState: Codable, Equatable {
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
     var hadUnreadable = false
+    /// Saved blocks this version can't read (a kind of block from a newer version, or apps iOS couldn't read back),
+    /// kept exactly as they were and saved again after the others — so they're never lost, and come back as soon as
+    /// they can be read. Until then nothing acts on them: they don't block, and their slots and monitors are freed.
+    /// Before 1.1.2 such a block was dropped the next time anything was saved.
+    var unreadRules: [RawJSON] = []
 
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
@@ -142,14 +147,25 @@ struct ArcState: Codable, Equatable {
         slots = Slots.assign(slots, ruleIDs: rules.map(\.id.uuidString), count: Names.slotCount)
     }
 
+    /// The ids of the saved blocks this version can't read (`unreadRules`).
+    var unreadIDs: Set<UUID> {
+        Set(unreadRules.compactMap { raw -> UUID? in
+            guard case .object(let o) = raw, case .string(let s)? = o["id"] else { return nil }
+            return UUID(uuidString: s)
+        })
+    }
+
     // Decode field by field, so a missing or unreadable setting falls back to its default instead of failing the rest.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let all = try? c.decode([Rule].self, forKey: .rules) {
             rules = all
         } else {
-            // keep every rule that can be read instead of dropping them all
-            rules = ((try? c.decode([Lossy<Rule>].self, forKey: .rules)) ?? []).compactMap(\.value)
+            // keep every rule that can be read, and the others exactly as they were saved (see `unreadRules`)
+            let read = (try? c.decode([Lossy<Rule>].self, forKey: .rules)) ?? []
+            let raw = (try? c.decode([RawJSON].self, forKey: .rules)) ?? []
+            rules = read.compactMap(\.value)
+            if raw.count == read.count { unreadRules = zip(read, raw).compactMap { $0.value == nil ? $1 : nil } }
             hadUnreadable = c.contains(.rules)
         }
         session = try? c.decode(FocusSession.self, forKey: .session)
@@ -164,6 +180,62 @@ struct ArcState: Codable, Equatable {
         strictLock = (try? c.decode(Bool.self, forKey: .strictLock)) ?? true
         strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
         strictUntil = (try? c.decode([String: Date].self, forKey: .strictUntil)) ?? [:]
+    }
+
+    /// Like the synthesized encoding (nil fields left out), with the blocks this version can't read written back
+    /// after the others, exactly as they were read.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        var list = c.nestedUnkeyedContainer(forKey: .rules)
+        for r in rules { try list.encode(r) }
+        for raw in unreadRules { try list.encode(raw) }
+        try c.encodeIfPresent(session, forKey: .session)
+        try c.encodeIfPresent(lockInUntil, forKey: .lockInUntil)
+        try c.encodeIfPresent(lastSessionSelection, forKey: .lastSessionSelection)
+        try c.encode(lastSessionMinutes, forKey: .lastSessionMinutes)
+        try c.encode(headsUp, forKey: .headsUp)
+        try c.encode(onboarded, forKey: .onboarded)
+        try c.encode(slots, forKey: .slots)
+        try c.encode(deletionProtection, forKey: .deletionProtection)
+        try c.encodeIfPresent(deletionProtectionOffAt, forKey: .deletionProtectionOffAt)
+        try c.encode(strictLock, forKey: .strictLock)
+        try c.encodeIfPresent(strictLockOffAt, forKey: .strictLockOffAt)
+        try c.encode(strictUntil, forKey: .strictUntil)
+    }
+}
+
+/// Any JSON value, kept exactly as it was read: a saved block this version can't read (ArcState.unreadRules).
+enum RawJSON: Codable, Equatable {
+    case null
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case string(String)
+    case array([RawJSON])
+    case object([String: RawJSON])
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let i = try? c.decode(Int.self) { self = .int(i) }
+        else if let d = try? c.decode(Double.self) { self = .double(d) }
+        else if let s = try? c.decode(String.self) { self = .string(s) }
+        else if let a = try? c.decode([RawJSON].self) { self = .array(a) }
+        else { self = .object(try c.decode([String: RawJSON].self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case .bool(let b): try c.encode(b)
+        case .int(let i): try c.encode(i)
+        case .double(let d): try c.encode(d)
+        case .string(let s): try c.encode(s)
+        case .array(let a): try c.encode(a)
+        case .object(let o): try c.encode(o)
+        }
     }
 }
 
@@ -212,6 +284,11 @@ enum StateStore {
     static func save(_ state: ArcState) {
         if let data = try? JSONEncoder().encode(state) { AppGroup.defaults.set(data, forKey: key) }
     }
+    /// The copy kept the first time a saved state couldn't be fully read (see `load`), read with this version.
+    static func unreadableCopy() -> ArcState? {
+        guard let data = AppGroup.defaults.data(forKey: key + ".unreadable") else { return nil }
+        return try? JSONDecoder().decode(ArcState.self, from: data)
+    }
     /// Read-modify-write on the freshest copy (the app and the monitor extension both write). A state that isn't set
     /// up — what an unreadable one looks like before the first unlock after a restart — is never changed or written
     /// back, except by the app setting itself up with the iPhone unlocked (`settingUp`).
@@ -233,8 +310,37 @@ enum StateStore {
     }
 }
 
-/// Progress of a daily limit today in tenths (10 = used up). Written by the monitor extension, and by the app when
-/// an edit carries today's use over to a stricter limit.
+/// Blocks that versions before 1.1.2 lost: a saved block one of them couldn't read (one from a newer version, or
+/// apps iOS couldn't read back) was dropped the next time anything was saved. The copy kept before that
+/// (StateStore.unreadableCopy) still has them; Home offers back the ones missing from the list now. One restored or
+/// dismissed isn't offered again. Arc Lock can't tell a lost block from one deleted later, so it asks.
+enum MissingBlocks {
+    private static let key = "missing.handled"
+    /// The blocks missing the first time this version looked (set once): a block deleted on purpose later is never
+    /// offered back.
+    private static let offeredKey = "missing.offered"
+    private static var handled: Set<String> { Set(AppGroup.defaults.stringArray(forKey: key) ?? []) }
+    static func markHandled(_ ids: [UUID]) {
+        AppGroup.defaults.set(Array(handled.union(ids.map(\.uuidString))).sorted(), forKey: key)
+    }
+    static func list(missingFrom state: ArcState) -> [Rule] {
+        guard state.isSetUp, let copy = StateStore.unreadableCopy() else { return [] }
+        let here = Set(state.rules.map(\.id)).union(state.unreadIDs)
+        let offered: Set<String>
+        if let saved = AppGroup.defaults.stringArray(forKey: offeredKey) {
+            offered = Set(saved)
+        } else {
+            offered = Set(copy.rules.filter { !here.contains($0.id) }.map(\.id.uuidString))
+            AppGroup.defaults.set(offered.sorted(), forKey: offeredKey)
+        }
+        let done = handled
+        return copy.rules.filter { offered.contains($0.id.uuidString) && !here.contains($0.id) && !done.contains($0.id.uuidString) }
+    }
+}
+
+/// Progress of a daily limit today in tenths (10 = used up), or of a time-out's current stretch of use (cleared when
+/// a break starts and ends). Written by the monitor extension, and by the app when an edit carries the use so far
+/// over to the changed block.
 struct UsageMark: Codable, Equatable {
     var day: Date
     var level: Int
@@ -386,6 +492,35 @@ extension FamilyActivitySelection {
         !webDomainTokens.isSuperset(of: old.webDomainTokens)
     }
     func gained(over old: FamilyActivitySelection) -> Bool { old.lost(from: self) }
+    /// The items here that aren't in `other`.
+    func subtracting(_ other: FamilyActivitySelection) -> FamilyActivitySelection {
+        var s = self
+        s.applicationTokens = applicationTokens.subtracting(other.applicationTokens)
+        s.categoryTokens = categoryTokens.subtracting(other.categoryTokens)
+        s.webDomainTokens = webDomainTokens.subtracting(other.webDomainTokens)
+        return s
+    }
+    /// The items here and in `other`.
+    func adding(_ other: FamilyActivitySelection) -> FamilyActivitySelection {
+        var s = self
+        s.applicationTokens.formUnion(other.applicationTokens)
+        s.categoryTokens.formUnion(other.categoryTokens)
+        s.webDomainTokens.formUnion(other.webDomainTokens)
+        return s
+    }
+}
+
+extension PendingChange where Selection == FamilyActivitySelection {
+    /// The same queued change with more apps and websites (added to the running version while it was locked), so they
+    /// stay when it lands. A queued deletion stays a deletion; a change that keeps the apps keeps them.
+    func adding(_ more: FamilyActivitySelection, domains: [String]) -> PendingChange {
+        guard var p = plan else { return self }
+        var c = self
+        for d in domains where !p.domains.contains(d) { p.domains.append(d) }
+        c.plan = p
+        if let s = selection { c.selection = s.adding(more) }
+        return c
+    }
 }
 
 /// Plain-text strings for code outside SwiftUI (extensions, notifications). Keys live in */Localizable.strings.

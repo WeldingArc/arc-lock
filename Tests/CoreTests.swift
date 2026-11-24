@@ -618,6 +618,70 @@ struct CoreTests {
         got = SavedState.update(load: load, save: save, isSetUp: \.setUp, settingUp: { asked += 1; return false }()) { $0.blocks = ["y"] }
         check(asked == 1 && writes == 4 && disk == Saved(), "a state that isn't set up asks, and a no writes nothing")
 
+        // 1.1.2: adding apps or websites applies at any time (Change.onlyAdds) — nothing else does while a block is locked
+        do {
+            let lim = RulePlan(name: "Social", kind: .limit, limitMinutes: 45, domains: ["reddit.com"])
+            var more = lim; more.domains.append("x.com")
+            check(Change.onlyAdds(from: lim, to: lim, selectionLost: false, selectionGained: true), "only more apps: an addition")
+            check(Change.onlyAdds(from: lim, to: more, selectionLost: false, selectionGained: false), "only a new website: an addition")
+            check(!Change.onlyAdds(from: lim, to: lim, selectionLost: false, selectionGained: false), "nothing new: not an addition")
+            check(!Change.onlyAdds(from: lim, to: more, selectionLost: true, selectionGained: true), "an app taken out: not an addition")
+            var fewerSites = lim; fewerSites.domains = []
+            check(!Change.onlyAdds(from: lim, to: fewerSites, selectionLost: false, selectionGained: true), "a website taken out: no")
+            var stricterToo = more; stricterToo.limitMinutes = 30
+            check(!Change.onlyAdds(from: lim, to: stricterToo, selectionLost: false, selectionGained: true),
+                  "anything else changed too: not an addition (even a stricter limit)")
+            var renamed = lim; renamed.name = "Feeds"
+            check(!Change.onlyAdds(from: lim, to: renamed, selectionLost: false, selectionGained: true), "a new name: no")
+            var reordered = more; reordered.domains = ["x.com", "reddit.com"]
+            check(Change.onlyAdds(from: lim, to: reordered, selectionLost: false, selectionGained: false), "website order doesn't matter")
+            check(Change.direction(from: lim, to: more, selectionLost: false, selectionGained: true) == .stricter, "an addition is stricter")
+            let place = RulePlan(kind: .place, places: [PlaceSpot(latitude: 37.5, longitude: 127.0, name: "Library")])
+            var otherPlace = place; otherPlace.places = [PlaceSpot(latitude: 37.6, longitude: 127.0, name: "Gym")]
+            check(!Change.onlyAdds(from: place, to: otherPlace, selectionLost: false, selectionGained: true), "another place: not an addition")
+        }
+        // Capacity keeps room for saved blocks this version can't read
+        let limits17 = Array(repeating: RulePlan(kind: .limit), count: 17)
+        check(Capacity.fits(limits17), "17 limits fit")
+        check(!Capacity.fits(limits17, reserved: 1), "…not with an unreadable block kept")
+        check(!Capacity.fits(Array(repeating: RulePlan(kind: .limit), count: 15), reserved: 2), "an unreadable block may need two monitors")
+        check(Capacity.fits(Array(repeating: RulePlan(kind: .limit), count: 14), reserved: 2), "14 limits + 2 kept fit")
+
+        // A count registered again mid-way keeps the use already proven (time-outs, limits counting from registration)
+        check(LimitMath.carried(level: 6, oldLimit: 25, selectionLost: false, startsOver: false) == 15, "6 tenths of 25 min keep 15 min")
+        check(LimitMath.carried(level: 6, oldLimit: 25, selectionLost: true, startsOver: false) == 0, "an app taken out: nothing kept")
+        check(LimitMath.carried(level: 6, oldLimit: 25, selectionLost: false, startsOver: true) == 0, "a new period: nothing kept")
+        let rest = LimitMath.thresholds(limit: 25, credit: 15)
+        check(rest.map(\.tenth) == [7, 8, 9, 10] && rest.map(\.minutes) == [2, 5, 7, 10],
+              "15 of 25 min used, an app added: the break comes after the 10 minutes left, not a fresh 25")
+        let fiveMinute = LimitMath.thresholds(limit: 5)
+        check(fiveMinute.map(\.minutes) == [1, 2, 3, 4, 5] && fiveMinute.last?.tenth == 10, "a 5-minute time-out: whole-minute steps, the break at 5")
+        // the same limit keeps its mark exactly: no time handed out again with each app added (verifier, 1.1.2)
+        for limit in [5, 15, 25, 35, 45, 55, 75, 105, 240] {
+            for level in 0...9 {
+                var l = level
+                for _ in 0..<5 { l = LimitMath.carriedLevel(level: l, oldLimit: limit, newLimit: limit, selectionLost: false, startsOver: false) }
+                check(l == level, "\(limit) min at \(level) tenths keeps \(level) after five additions")
+            }
+        }
+        check(LimitMath.carriedLevel(level: 7, oldLimit: 25, newLimit: 20, selectionLost: false, startsOver: false) == 8,
+              "25 → 20 min with 17 min proven: 8 tenths in")
+        check(LimitMath.carriedLevel(level: 7, oldLimit: 25, newLimit: 25, selectionLost: true, startsOver: false) == 0, "an app taken out: from zero")
+        check(LimitMath.carriedLevel(level: 7, oldLimit: 25, newLimit: 25, selectionLost: false, startsOver: true) == 0, "a new period: from zero")
+        check(LimitMath.carriedLevel(level: 6, oldLimit: 25, newLimit: 10, selectionLost: false, startsOver: false) == 10,
+              "made shorter than the 15 min proven: used up (a time-out's break starts now)")
+        check(LimitMath.level(forUsed: 15, limit: 10) == 10, "made shorter than the use so far: due now")
+        check(LimitMath.level(forUsed: 15, limit: 20) == 7, "made 20 min with 15 used: 7 tenths in")
+        let afternoon = date("2026-10-12 15:00", seoul)
+        let todayStart = Period.start(containing: afternoon, resetAt: .midnight, calendar: seoul)
+        check(Counting.creditHolds(creditDay: todayStart, resetAt: .midnight, now: afternoon, calendar: seoul), "a credit holds the day it was given")
+        check(!Counting.creditHolds(creditDay: todayStart, resetAt: .midnight, now: date("2026-10-13 00:30", seoul), calendar: seoul),
+              "…never after the reset")
+        check(!Counting.creditHolds(creditDay: nil, resetAt: .midnight, now: afternoon, calendar: seoul), "no credit day: no credit")
+        let fourAM = TimeOfDay(4, 0)
+        check(Counting.creditHolds(creditDay: Period.start(containing: afternoon, resetAt: fourAM, calendar: seoul), resetAt: fourAM,
+                                   now: date("2026-10-13 03:30", seoul), calendar: seoul), "a 4 AM reset: 3:30 the next night is the same period")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }

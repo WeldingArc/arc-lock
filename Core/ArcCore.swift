@@ -407,7 +407,7 @@ public enum EditAccess: Equatable, Sendable {
     /// A daily limit or time-out that is counting: stricter changes apply now, looser ones from `loosenFrom` (its next
     /// reset).
     case stricterOnly(loosenFrom: Date)
-    /// Read-only until `until`.
+    /// Read-only until `until`, except that apps and websites can be added (`Change.onlyAdds`).
     case locked(until: Date, reason: LockReason)
 }
 
@@ -501,6 +501,17 @@ public enum Change {
         }
         if looser { return .looser }
         return stricter ? .stricter : .same
+    }
+
+    /// Whether `new` only adds to `old`: more apps or websites, nothing else changed (`selectionLost`/`selectionGained`
+    /// as for `direction`). Adding only makes a block stricter, so it's allowed at any time — while a block with Strict
+    /// lock runs, while a limit is used up, during a break or a lock-in.
+    public static func onlyAdds(from old: RulePlan, to new: RulePlan, selectionLost: Bool, selectionGained: Bool) -> Bool {
+        guard !selectionLost, Set(new.domains).isSuperset(of: old.domains) else { return false }
+        var rest = new
+        rest.domains = old.domains
+        guard rest == old else { return false }
+        return selectionGained || Set(new.domains) != Set(old.domains)
     }
 
     /// Whether `a`'s daily window contains all of `b`'s (minute-of-day ranges, overnight aware).
@@ -696,9 +707,11 @@ public enum Capacity {
     }
     /// Rules that may exist at all (each keeps one store slot).
     public static var maxRules: Int { Limits.maxActivities - Limits.reservedActivities }
-    /// Whether these blocks fit in iOS's 20 monitors (with Block now and the midnight housekeeping).
-    public static func fits(_ plans: [RulePlan]) -> Bool {
-        plans.count <= maxRules && activities(for: plans) <= maxRules
+    /// Whether these blocks fit in iOS's 20 monitors (with Block now and the midnight housekeeping). `reserved` =
+    /// saved blocks this version can't read (kept as they are, see Shared `ArcState.unreadRules`): each may come back
+    /// and need a slot and two monitors.
+    public static func fits(_ plans: [RulePlan], reserved: Int = 0) -> Bool {
+        plans.count + reserved <= maxRules && activities(for: plans) + 2 * reserved <= maxRules
     }
 }
 
@@ -755,9 +768,10 @@ public enum Coverage {
 }
 
 public enum LimitMath {
-    /// Usage events for a daily limit: each tenth of the limit (1…9) and the limit itself (10), in minutes after
-    /// the monitor starts counting. `credit` = minutes already proven used today (after a mid-day edit): tenths
-    /// already passed are left out and the rest come that much sooner. Every event is at least 1 minute.
+    /// Usage events for a daily limit or a time-out's stretch of use: each tenth (1…9) and the limit itself (10), in
+    /// minutes after the monitor starts counting. `credit` = minutes already proven used (a monitor registered again
+    /// mid-way, see `carried`): tenths already passed are left out and the rest come that much sooner. Every event is
+    /// at least 1 minute.
     public static func thresholds(limit: Int, credit: Int = 0) -> [(tenth: Int, minutes: Int)] {
         var out: [(tenth: Int, minutes: Int)] = []
         for k in 1...9 {
@@ -774,6 +788,22 @@ public enum LimitMath {
 
     /// The mark level `minutes` of use reaches on a limit of `limit` minutes (10 = used up).
     public static func level(forUsed minutes: Int, limit: Int) -> Int { min(10, max(0, minutes) * 10 / max(1, limit)) }
+
+    /// The use (minutes) a block keeps when it's changed mid-way — its period, or a time-out's stretch of use: what its
+    /// marks prove (`level` tenths of `oldLimit`). Nothing when an app or website was taken out (its use may be in
+    /// there) or the count starts over (a new reset time begins a new period).
+    public static func carried(level: Int, oldLimit: Int, selectionLost: Bool, startsOver: Bool) -> Int {
+        selectionLost || startsOver ? 0 : usedAtLeast(level: level, limit: oldLimit)
+    }
+
+    /// The mark a changed block keeps. With the same limit it keeps its level as it is: turned into minutes and back it
+    /// would round down (25 min at 7 tenths → 17 min → 6 tenths), handing time out again with every app added. With
+    /// another limit, the level its proven minutes reach on the new one.
+    public static func carriedLevel(level: Int, oldLimit: Int, newLimit: Int, selectionLost: Bool, startsOver: Bool) -> Int {
+        if selectionLost || startsOver { return 0 }
+        if oldLimit == newLimit { return min(max(level, 0), 10) }
+        return self.level(forUsed: usedAtLeast(level: level, limit: oldLimit), limit: newLimit)
+    }
 }
 
 public enum Plausibility {
@@ -803,5 +833,13 @@ public enum Counting {
     public static func since(periodStart: Date, registeredAt: Date?, includesPast: Bool, calendar: Calendar) -> Date {
         if includesPast { return calendar.dateInterval(of: .hour, for: periodStart)?.start ?? periodStart }
         return max(periodStart, registeredAt ?? .distantPast)
+    }
+
+    /// A monitor registered mid-way counts on from use already proven (`LimitMath.thresholds` with a credit). Its
+    /// thresholds are the rest of that period's limit: they hold only in the period the credit was given in
+    /// (`creditDay` = that period's start), never after the block resets.
+    public static func creditHolds(creditDay: Date?, resetAt: TimeOfDay, now: Date, calendar: Calendar) -> Bool {
+        guard let day = creditDay else { return false }
+        return abs(day.timeIntervalSince(Period.start(containing: now, resetAt: resetAt, calendar: calendar))) < 1
     }
 }

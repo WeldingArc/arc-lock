@@ -25,7 +25,7 @@ struct BlocksTab: View {
                     .id("places")
                 Section {} footer: {
                     Text(model.strictLockActive
-                         ? "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted."
+                         ? "Blocks with Strict lock can't be stopped or loosened while they run, but you can always add apps and websites to them. With deletion protection on, no app can be deleted."
                          : "Strict lock is off: blocks can be stopped. One that was running or counting when you turned it off stays strict until its own reset, or until it ends.")
                 }
             }
@@ -76,10 +76,6 @@ struct BlocksTab: View {
     @ViewBuilder
     private func section(_ title: LocalizedStringKey, kind: RuleKind, rules: [Rule], empty: LocalizedStringKey) -> some View {
         Section {
-            if rules.isEmpty {
-                Button { editing = .new(kind) } label: { Label(addTitle(kind), systemImage: "plus.circle") }
-                    .disabled(!model.canAdd(kind))
-            }
             ForEach(rules) { rule in
                 let stoppable = model.canStop(rule)
                 BlockRow(rule: rule, onEdit: { editing = .edit(rule.id) },
@@ -91,6 +87,9 @@ struct BlocksTab: View {
                         }
                     }
             }
+            // always there, so a second (or tenth) limit or time-out is one tap away — the same apps can be in several
+            Button { editing = .new(kind) } label: { Label(addTitle(kind), systemImage: "plus.circle") }
+                .disabled(!model.canAdd(kind))
         } header: {
             Text(title)
         } footer: {

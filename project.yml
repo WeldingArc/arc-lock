@@ -10,11 +10,11 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.1"
-    CURRENT_PROJECT_VERSION: "18"
+    MARKETING_VERSION: "1.1.2"
+    CURRENT_PROJECT_VERSION: "19"
     DEVELOPMENT_TEAM: 446W55N7PB
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
     SUPPORTS_MACCATALYST: NO
     SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
     SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
@@ -50,7 +50,7 @@ targets:
       base:
         PRODUCT_NAME: ArcLock
         PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: App/ArcLock.entitlements
@@ -75,7 +75,7 @@ targets:
       base:
         PRODUCT_NAME: ArcLockMonitor
         PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock.monitor
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Extensions/Monitor/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Extensions/Monitor/Monitor.entitlements
@@ -97,7 +97,7 @@ targets:
       base:
         PRODUCT_NAME: ArcLockShieldConfig
         PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock.shield-config
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Extensions/ShieldConfig/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Extensions/ShieldConfig/ShieldConfig.entitlements
@@ -119,7 +119,7 @@ targets:
       base:
         PRODUCT_NAME: ArcLockShieldAction
         PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock.shield-action
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Extensions/ShieldAction/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Extensions/ShieldAction/ShieldAction.entitlements
@@ -141,7 +141,7 @@ targets:
       base:
         PRODUCT_NAME: ArcLockReport
         PRODUCT_BUNDLE_IDENTIFIER: io.github.weldingarc.arclock.report
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Extensions/Report/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Extensions/Report/Report.entitlements

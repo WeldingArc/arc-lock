@@ -4,8 +4,8 @@ import SwiftUI
 import UIKit
 
 /// Create or change a schedule, a daily limit or a time-out. What may be changed follows the lock policy:
-/// a Strict-lock block is read-only while it runs (or during a lock-in), and looser changes to a counting
-/// limit or time-out wait until its next reset. A block without Strict lock can always be changed.
+/// a Strict-lock block that runs (or any block during a lock-in) only takes more apps and websites, and looser changes
+/// to a counting limit or time-out wait until its next reset. A block without Strict lock can always be changed.
 struct RuleEditor: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +30,18 @@ struct RuleEditor: View {
         return nil
     }
     private var access: EditAccess { existing.map { model.access($0) } ?? .free }
+    /// Locked (running with Strict lock, used up, on a break, a lock-in): only apps and websites can be added.
     private var readOnly: Bool { if case .locked = access { return true }; return false }
+    /// What a locked block is saved with now: the version that runs.
+    private var locked: (plan: RulePlan, selection: FamilyActivitySelection)? {
+        guard readOnly, let r = existing else { return nil }
+        return (r.plan, r.selection)
+    }
+    /// Something was added to a locked block (Save is offered for that only).
+    private var addsSomething: Bool {
+        guard let l = locked else { return false }
+        return selection.gained(over: l.selection) || Set(plan.domains) != Set(l.plan.domains)
+    }
     private var problems: [PlanProblem] {
         Validate.problems(plan, appCount: selection.applicationTokens.count, hasSelection: !selection.isEmpty,
                           webTokenCount: selection.webDomainTokens.count)
@@ -43,8 +54,12 @@ struct RuleEditor: View {
                 Group {
                     if existing == nil { kindSection }
                     nameSection
-                    appsSection
-                    websitesSection
+                }
+                .disabled(readOnly)
+                // a locked block still takes more apps and websites (nothing can be taken out)
+                appsSection
+                websitesSection
+                Group {
                     switch plan.kind {
                     case .schedule: whenSection
                     case .limit: limitSection
@@ -70,16 +85,21 @@ struct RuleEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(readOnly ? "Close" : "Cancel") { dismiss() }
+                    Button(readOnly && !addsSomething ? "Close" : "Cancel") { dismiss() }
                 }
-                if !readOnly {
+                if !readOnly || addsSomething {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") { save() }.fontWeight(.semibold).disabled(!problems.isEmpty)
                     }
                 }
             }
-            .familyActivityPicker(headerText: String(localized: "Choose the apps, categories and websites to block."),
+            .familyActivityPicker(headerText: readOnly ? String(localized: "Choose apps, categories and websites to add.")
+                                                       : String(localized: "Choose the apps, categories and websites to block."),
                                   isPresented: $showPicker, selection: $selection)
+            .onChange(of: selection) { _, picked in
+                // a locked block keeps everything it blocks: the picker can only add to it
+                if let l = locked, picked.lost(from: l.selection) { selection = picked.adding(l.selection) }
+            }
             .confirmationDialog(Text("This block starts right away"), isPresented: $confirmStart, titleVisibility: .visible) {
                 Button("Save and lock until \(Fmt.moment(startsNowUntil ?? Date(), now: model.now))") { commitSave() }
             } message: {
@@ -120,9 +140,9 @@ struct RuleEditor: View {
         if let r = existing {
             // a waiting change is what the user last saved, so editing continues from it; a locked rule shows
             // the version that is running
-            let locked: Bool = { if case .locked = model.access(r) { return true }; return false }()
-            plan = locked ? r.plan : (r.pending?.plan ?? r.plan)
-            selection = locked ? r.selection : (r.pending?.selection ?? r.selection)
+            let isLocked: Bool = { if case .locked = model.access(r) { return true }; return false }()
+            plan = isLocked ? r.plan : (r.pending?.plan ?? r.plan)
+            selection = isLocked ? r.selection : (r.pending?.selection ?? r.selection)
         } else if case .new(let kind) = target {
             plan = RulePlan(name: "", kind: kind, start: TimeOfDay(9, 0), end: TimeOfDay(17, 0),
                             days: kind == .schedule ? [2, 3, 4, 5, 6] : Set(1...7), limitMinutes: kind == .timeout ? 20 : 30)
@@ -145,15 +165,10 @@ struct RuleEditor: View {
     @ViewBuilder private var lockNotice: some View {
         switch access {
         case .locked(let until, let reason):
-            notice("lock.fill", AppModel.lockedMessage(until: until, reason: reason, now: model.now))
+            notice("lock.fill", AppModel.addOnlyMessage(until: until, reason: reason, now: model.now))
         case .stricterOnly(let from) where plan.kind == .timeout:
             notice("clock.arrow.circlepath",
-                   String(localized: "This time-out is locked in until it resets. A longer break or more days apply now; any other change — the minutes of use, the apps, a shorter break, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
-        case .stricterOnly(let from) where existing.map({ !Monitoring.countsEarlierUse($0.plan, id: $0.id, now: model.now) }) ?? false:
-            // counting from its registration (its reset time just changed, or it's off the hour): a new count would
-            // hand out time already used, so only more days apply now (AppModel.save)
-            notice("clock.arrow.circlepath",
-                   String(localized: "This limit is locked in until it resets. More days apply now; any other change — the minutes, the apps, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
+                   String(localized: "This time-out is locked in until it resets. Stricter changes apply now; anything else — more minutes of use, a shorter break, fewer apps or days, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
         case .stricterOnly(let from):
             notice("clock.arrow.circlepath",
                    String(localized: "This limit is locked in until it resets. Stricter changes apply now; anything else — more time, fewer apps or days, the reset time, deleting — starts at \(Fmt.moment(from, now: model.now))."))
@@ -247,13 +262,18 @@ struct RuleEditor: View {
                 }
                 .padding(.vertical, 4)
             }
-            if !readOnly {
+            if readOnly {
+                Button("Add apps & websites") { showPicker = true }
+            } else {
                 Button(selection.isEmpty ? "Choose apps & websites" : "Change") { showPicker = true }
             }
         } header: {
             Text("Apps & websites")
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
+                if readOnly {
+                    Text("While it's locked you can add apps and websites, but not take any out.")
+                }
                 if plan.kind.countsUse {
                     Text(plan.kind == .limit ? "Time in these apps and websites adds up toward one daily limit."
                                              : "Time in these apps and websites adds up toward each break.")
@@ -293,26 +313,22 @@ struct RuleEditor: View {
             ForEach(plan.domains, id: \.self) { d in
                 Label(d, systemImage: "globe")
                     .swipeActions {
-                        if !readOnly {
+                        // a locked block keeps the websites it has; one added just now can still be taken back
+                        if !readOnly || !(locked?.plan.domains.contains(d) ?? false) {
                             Button(role: .destructive) { plan.domains.removeAll { $0 == d } } label: { Label("Remove", systemImage: "trash") }
                         }
                     }
             }
-            if plan.domains.isEmpty && readOnly {
-                Text("None.").foregroundStyle(Palette.faint)
-            }
-            if !readOnly {
-                HStack {
-                    TextField("Website", text: $newDomain, prompt: Text("youtube.com"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .submitLabel(.done)
-                        .onSubmit(addDomain)
-                    Button("Add", action: addDomain)
-                        .buttonStyle(.borderless)
-                        .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty || plan.domains.count >= Limits.maxDomains)
-                }
+            HStack {
+                TextField("Website", text: $newDomain, prompt: Text("youtube.com"))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .submitLabel(.done)
+                    .onSubmit(addDomain)
+                Button("Add", action: addDomain)
+                    .buttonStyle(.borderless)
+                    .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty || plan.domains.count >= Limits.maxDomains)
             }
         } header: {
             Text("Websites by address")

@@ -111,6 +111,7 @@ struct OnboardingView: View {
             }
         }
         .multilineTextAlignment(.center)
+        .frame(maxWidth: 560)
         .padding(.horizontal, 28)
         .padding(.bottom, 12)
     }
@@ -120,7 +121,7 @@ struct OnboardingView: View {
             ArcMark(size: 112)
             Text("Arc Lock").font(.p(46, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
             Text("Blocks you can't break.").font(.p(20, .light, .title3)).foregroundStyle(Palette.brass)
-            Text("Free, no account, no ads. Everything stays on this iPhone.")
+            Text(Device.isPad ? "Free, no account, no ads. Everything stays on this iPad." : "Free, no account, no ads. Everything stays on this iPhone.")
                 .font(.p(15, .regular)).foregroundStyle(Palette.muted)
         }, button: "Continue", action: { page = 1 })
     }
@@ -152,7 +153,8 @@ struct OnboardingView: View {
             Text("Screen Time access").font(.p(30, .light, .title)).foregroundStyle(Palette.ink)
             Text("Arc Lock blocks apps through Apple's Screen Time. iOS will ask for your Face ID or passcode.")
                 .font(.p(16, .regular)).foregroundStyle(Palette.muted)
-            Text("Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.")
+            Text(Device.isPad ? "Apple keeps what you use on this iPad — Arc Lock never sees app names or your browsing, and sends nothing anywhere."
+                              : "Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.")
                 .font(.p(14, .regular)).foregroundStyle(Palette.faint)
         }, button: "Continue", waits: true, action: {
             // granted already (asked before): nothing to ask

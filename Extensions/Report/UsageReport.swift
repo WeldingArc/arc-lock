@@ -66,9 +66,18 @@ struct UsageScene: DeviceActivityReportScene {
                 }
             }
         }
-        let minutes = Int(seconds / 60)
-        // "since 4:00 AM" when the count began later than midnight (a reset time, or a registration by an older version)
-        let shownSince = since > periodStart ? since : (rule.map { $0.plan.resetAt != .midnight } == true ? periodStart : nil)
+        // A limit counting from registration that was registered again mid-way goes on from the use proven before
+        // (Registration.credit): that's part of the count that locks it, so it's part of the line too.
+        let credit: Int = limit.flatMap { l -> Int? in
+            guard let r = Monitoring.registration(l.id), let c = r.credit, c > 0,
+                  Counting.creditHolds(creditDay: r.creditDay, resetAt: l.plan.resetAt, now: now, calendar: calendar) else { return nil }
+            return c
+        } ?? 0
+        let minutes = Int(seconds / 60) + credit
+        // "since 4:00 AM" when the count began later than midnight (a reset time, or a registration by an older version);
+        // with a credit the count began before the registration, at a time not kept — then only the reset time is shown
+        let resetShown = rule.map { $0.plan.resetAt != .midnight } == true ? periodStart : nil
+        let shownSince = credit > 0 ? resetShown : (since > periodStart ? since : resetShown)
         return UsageSummary(minutes: minutes, limit: limit?.plan.limitMinutes, since: shownSince)
     }
 

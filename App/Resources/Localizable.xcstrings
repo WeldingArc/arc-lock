@@ -441,6 +441,16 @@
         }
       }
     },
+    "Add apps & websites": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 및 웹사이트 추가"
+          }
+        }
+      }
+    },
     "After %@ of use, these apps lock for %@. Then they open again and the count starts over. It all starts fresh at %@.": {
       "localizations": {
         "en": {
@@ -557,6 +567,16 @@
         }
       }
     },
+    "Apple keeps what you use on this iPad — Arc Lock never sees app names or your browsing, and sends nothing anywhere.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 기록은 Apple이 이 iPad에 보관합니다. Arc Lock은 사용 중인 앱이나 방문한 웹사이트를 알 수 없으며, 어떤 정보도 외부로 보내지 않습니다."
+          }
+        }
+      }
+    },
     "Apple keeps what you use on this iPhone — Arc Lock never sees app names or your browsing, and sends nothing anywhere.": {
       "localizations": {
         "ko": {
@@ -613,6 +633,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arc Lock은 Apple의 스크린 타임을 통해 앱을 차단합니다. iOS에서 Face ID 또는 암호를 요청합니다."
+          }
+        }
+      }
+    },
+    "Arc Lock can't be deleted, and neither can any other app on this iPad.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 삭제할 수 없으며, 이 iPad의 다른 앱도 삭제할 수 없습니다."
           }
         }
       }
@@ -840,12 +870,12 @@
         }
       }
     },
-    "Blocks with Strict lock can't be changed or stopped while they run. With deletion protection on, no app can be deleted.": {
+    "Blocks with Strict lock can't be stopped or loosened while they run, but you can always add apps and websites to them. With deletion protection on, no app can be deleted.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "강제 잠금이 켜진 차단은 실행 중에 변경하거나 중지할 수 없습니다. 삭제 방지를 켜면 앱을 삭제할 수 없습니다."
+            "value": "강제 잠금이 켜진 차단은 실행 중에 중지하거나 완화할 수 없지만, 앱과 웹사이트는 언제든 추가할 수 있습니다. 삭제 방지를 켜면 앱을 삭제할 수 없습니다."
           }
         }
       }
@@ -856,6 +886,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "중간에 해제할 수 없는 차단"
+          }
+        }
+      }
+    },
+    "Blocks you stopped start again, and none can be stopped, loosened or deleted. You can only add apps and websites to them.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "직접 중지한 차단도 다시 작동하며, 어떤 차단도 중지하거나 완화하거나 삭제할 수 없습니다. 차단에는 앱과 웹사이트를 추가하는 것만 할 수 있습니다."
           }
         }
       }
@@ -916,6 +956,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "앱 및 웹사이트 선택"
+          }
+        }
+      }
+    },
+    "Choose apps, categories and websites to add.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가할 앱, 카테고리, 웹사이트를 선택하세요."
           }
         }
       }
@@ -1106,6 +1156,16 @@
         }
       }
     },
+    "Don't restore these": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복원하지 않기"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "ko": {
@@ -1186,16 +1246,6 @@
         }
       }
     },
-    "Every block stays exactly as it is, and blocks you stopped start again. None can be stopped, changed or deleted.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "모든 차단이 지금 그대로 유지되며, 직접 중지한 차단도 다시 작동합니다. 어떤 차단도 중지하거나 바꾸거나 삭제할 수 없습니다."
-          }
-        }
-      }
-    },
     "Every day": {
       "localizations": {
         "ko": {
@@ -1236,12 +1286,12 @@
         }
       }
     },
-    "For the days you choose, every rule stays exactly as it is, and no app can be deleted. There is no early exit.": {
+    "For the days you choose, no rule can be loosened, stopped or deleted — you can only add to them — and no app can be deleted. There is no early exit.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선택한 기간에는 모든 규칙이 그대로 유지되며, 앱도 삭제할 수 없습니다. 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
+            "value": "선택한 기간에는 규칙을 완화하거나 중지하거나 삭제할 수 없고(추가만 할 수 있습니다), 앱도 삭제할 수 없습니다. 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
           }
         }
       }
@@ -1252,6 +1302,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "포레스트"
+          }
+        }
+      }
+    },
+    "Free, no account, no ads. Everything stays on this iPad.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정과 광고 없이 사용할 수 있습니다. 모든 데이터는 이 iPad에만 저장됩니다."
           }
         }
       }
@@ -1392,6 +1452,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "다음번에는 자동으로 다시 시작됩니다."
+          }
+        }
+      }
+    },
+    "It starts whenever you're at one of its places on a day it runs — right away if you're there now.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 요일에 해당 장소에 있으면 시작됩니다. 지금 그 장소에 있다면 바로 시작됩니다."
           }
         }
       }
@@ -1720,6 +1790,16 @@
         }
       }
     },
+    "Missing blocks": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사라진 차단"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "ko": {
@@ -1800,6 +1880,26 @@
         }
       }
     },
+    "No app can be deleted from this iPad, Arc Lock included.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 포함해 이 iPad의 앱을 삭제할 수 없습니다."
+          }
+        }
+      }
+    },
+    "No app can be deleted from this iPad, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 포함해 이 iPad의 앱을 삭제할 수 없습니다. 삭제 방지를 꺼도 강제 잠금이 켜진 차단이 실행 중이거나 사용 시간을 계산하는 동안에는 앱을 삭제할 수 없습니다. 해당 차단이 초기화되거나 끝나야 삭제 방지가 해제됩니다."
+          }
+        }
+      }
+    },
     "No app can be deleted from this iPhone, Arc Lock included.": {
       "localizations": {
         "ko": {
@@ -1850,22 +1950,12 @@
         }
       }
     },
-    "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks.": {
+    "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks, apps and websites.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "규칙을 완화하거나 삭제할 수 없고 앱도 삭제할 수 없습니다. 차단은 추가할 수 있습니다."
-          }
-        }
-      }
-    },
-    "None.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "없음."
+            "value": "규칙을 완화하거나 삭제할 수 없고 앱도 삭제할 수 없습니다. 차단, 앱, 웹사이트는 추가할 수 있습니다."
           }
         }
       }
@@ -2167,6 +2257,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "초기화 시각"
+          }
+        }
+      }
+    },
+    "Restore": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복원"
+          }
+        }
+      }
+    },
+    "Restore and lock until %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복원하고 %@까지 잠그기"
+          }
+        }
+      }
+    },
+    "Restore this place block?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 장소 차단을 복원할까요?"
+          }
+        }
+      }
+    },
+    "Restored. It works again from now on.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복원했습니다. 지금부터 다시 작동합니다."
           }
         }
       }
@@ -2602,6 +2732,16 @@
         }
       }
     },
+    "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the iPad.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "‘스크린 타임 설정 잠그기’(또는 ‘스크린 타임 암호 사용’)를 탭한 다음 친구에게 iPad를 건네세요."
+          }
+        }
+      }
+    },
     "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the phone.": {
       "localizations": {
         "ko": {
@@ -2722,6 +2862,16 @@
         }
       }
     },
+    "These blocks were saved before an update, but they're not in your list anymore. If you didn't delete them yourself, restore them here.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업데이트 전에 저장된 차단이지만 지금은 목록에 없습니다. 직접 삭제한 것이 아니라면 여기에서 복원하세요."
+          }
+        }
+      }
+    },
     "This Block now has Strict lock, so it can't be stopped. It ends on its own.": {
       "localizations": {
         "ko": {
@@ -2794,12 +2944,32 @@
         }
       }
     },
+    "This block is running. You can add apps and websites now; nothing else can change until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단이 실행 중입니다. 앱과 웹사이트는 지금 추가할 수 있으며, 그 밖의 항목은 %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
     "This block runs until you leave. It can't be changed before then.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "이 차단은 장소를 떠날 때까지 실행됩니다. 그전에는 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This block runs until you leave. You can add apps and websites now; nothing else can change before then.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 차단은 장소를 떠날 때까지 실행됩니다. 앱과 웹사이트는 지금 추가할 수 있으며, 그 밖의 항목은 그전까지 변경할 수 없습니다."
           }
         }
       }
@@ -2840,16 +3010,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 차단은 %@에 삭제됩니다."
-          }
-        }
-      }
-    },
-    "This limit is locked in until it resets. More days apply now; any other change — the minutes, the apps, the reset time, deleting — starts at %@.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 한도는 초기화될 때까지 고정됩니다. 요일을 추가하는 변경은 바로 적용됩니다. 그 밖의 변경(사용 시간, 앱, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
           }
         }
       }
@@ -2896,6 +3056,16 @@
         }
       }
     },
+    "This limit is used up. You can add apps and websites now; nothing else can change until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도를 모두 사용했습니다. 앱과 웹사이트는 지금 추가할 수 있으며, 그 밖의 항목은 %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
     "This setting can't be changed: the lock-in can only be made longer, never shorter or turned off, and Strict lock stays on until it ends.": {
       "localizations": {
         "ko": {
@@ -2906,12 +3076,12 @@
         }
       }
     },
-    "This time-out is locked in until it resets. A longer break or more days apply now; any other change — the minutes of use, the apps, a shorter break, the reset time, deleting — starts at %@.": {
+    "This time-out is locked in until it resets. Stricter changes apply now; anything else — more minutes of use, a shorter break, fewer apps or days, the reset time, deleting — starts at %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 타임아웃은 초기화될 때까지 고정됩니다. 휴식 시간을 늘리거나 요일을 추가하는 변경은 바로 적용됩니다. 그 밖의 변경(사용 시간, 앱, 휴식 시간 단축, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
+            "value": "이 타임아웃은 초기화될 때까지 고정됩니다. 더 제한적인 변경은 바로 적용됩니다. 그 밖의 변경(사용 시간 늘리기, 휴식 시간 단축, 앱이나 요일 줄이기, 초기화 시각 변경, 삭제)은 %@부터 적용됩니다."
           }
         }
       }
@@ -2922,6 +3092,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 타임아웃은 휴식 중입니다. %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This time-out is on a break. You can add apps and websites now; nothing else can change until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 타임아웃은 휴식 중입니다. 앱과 웹사이트는 지금 추가할 수 있으며, 그 밖의 항목은 %@까지 변경할 수 없습니다."
           }
         }
       }
@@ -3238,6 +3418,16 @@
         }
       }
     },
+    "When iPadOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPad.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPadOS에서 암호 복구용 Apple 계정을 요청하면 친구가 자신의 계정을 입력해야 합니다. 이 단계를 건너뛰지 마세요. 암호를 복구할 수 없으면 iPad를 초기화해야 할 수도 있습니다."
+          }
+        }
+      }
+    },
     "When the time is used up, these apps lock until %@. Today's use so far counts too, so a limit that's already used up locks as soon as you save it.": {
       "localizations": {
         "ko": {
@@ -3268,12 +3458,32 @@
         }
       }
     },
+    "While it's locked you can add apps and websites, but not take any out.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠겨 있는 동안에는 앱과 웹사이트를 추가할 수만 있고 뺄 수는 없습니다."
+          }
+        }
+      }
+    },
     "Will be deleted at %@": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "%@에 삭제 예정"
+          }
+        }
+      }
+    },
+    "You can add apps and websites while it runs, but not take any out.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 중에도 앱과 웹사이트를 추가할 수 있지만 뺄 수는 없습니다."
           }
         }
       }
@@ -3318,12 +3528,32 @@
         }
       }
     },
-    "You're locked in through %@. Rules can't be changed until then.": {
+    "You're locked in through %@. This setting can't be changed until then.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@까지 규칙이 고정됩니다. 그때까지 규칙을 변경할 수 없습니다."
+            "value": "%@까지 규칙이 고정됩니다. 그때까지 이 설정을 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "You're locked in through %@. Until then you can only add apps and websites to a block.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 규칙이 고정됩니다. 그때까지는 차단에 앱과 웹사이트를 추가하는 것만 할 수 있습니다."
+          }
+        }
+      }
+    },
+    "You're locked in through %@. You can add apps and websites now; nothing else can change until then.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@까지 규칙이 고정됩니다. 앱과 웹사이트는 지금 추가할 수 있으며, 그 밖의 항목은 그때까지 변경할 수 없습니다."
           }
         }
       }

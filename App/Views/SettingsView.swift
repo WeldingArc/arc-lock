@@ -122,9 +122,12 @@ struct SettingsTab: View {
                 .font(.p(15, .regular, .subheadline))
             }
         } footer: {
-            Text(model.state.strictLock || !model.heldRules.isEmpty || model.sessionHeld
-                 ? "No app can be deleted from this iPhone, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end."
-                 : "No app can be deleted from this iPhone, Arc Lock included.")
+            if model.state.strictLock || !model.heldRules.isEmpty || model.sessionHeld {
+                Text(Device.isPad ? "No app can be deleted from this iPad, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end."
+                                  : "No app can be deleted from this iPhone, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end.")
+            } else {
+                Text(Device.isPad ? "No app can be deleted from this iPad, Arc Lock included." : "No app can be deleted from this iPhone, Arc Lock included.")
+            }
         }
         .listRowBackground(Palette.card)
     }
@@ -262,7 +265,7 @@ struct LockInSheet: View {
                     VStack(spacing: 20) {
                         ArcMark(size: 64).padding(.top, 12)
                         Text("Lock in").font(.p(32, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
-                        Text("For the days you choose, every rule stays exactly as it is, and no app can be deleted. There is no early exit.")
+                        Text("For the days you choose, no rule can be loosened, stopped or deleted — you can only add to them — and no app can be deleted. There is no early exit.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
                         HStack(spacing: 8) {
                             ForEach(choices, id: \.self) { d in
@@ -330,8 +333,10 @@ struct HarderGuide: View {
                         Text("Put iOS's own Screen Time settings behind a passcode that only a friend knows.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted)
                         step(1, "Ask a friend to hold a passcode", "Pick someone you trust. They'll type a 4-digit code you don't see.")
-                        step(2, "Open Settings › Screen Time", "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the phone.")
-                        step(3, "Recovery goes to your friend", "When iOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPhone.")
+                        step(2, "Open Settings › Screen Time", Device.isPad ? "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the iPad."
+                                                                              : "Tap “Lock Screen Time Settings” (or “Use Screen Time Passcode”) and hand your friend the phone.")
+                        step(3, "Recovery goes to your friend", Device.isPad ? "When iPadOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPad."
+                                                                              : "When iOS asks for an Apple Account to recover the passcode, your friend enters their own. Don't skip this: a passcode nobody can recover can mean erasing the iPhone.")
                         Text("In a real emergency your friend can always give you the code. That's the point: a pause long enough for the urge to pass.")
                             .font(.p(14, .regular)).foregroundStyle(Palette.faint)
                     }

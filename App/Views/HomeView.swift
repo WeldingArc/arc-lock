@@ -1,6 +1,7 @@
 import DeviceActivity
 import FamilyControls
 import SwiftUI
+import UIKit
 
 enum EditorTarget: Identifiable, Hashable {
     case new(RuleKind)
@@ -15,12 +16,15 @@ struct HomeTab: View {
     @EnvironmentObject private var model: AppModel
     let openBlockNow: () -> Void
     @State private var showLockIn = false
+    /// A lost block that would start the moment it's restored (asked first, like saving one in the editor).
+    @State private var confirmRestore: Rule?
 
     var body: some View {
         NavigationStack {
             List {
                 Section { StatusHero() }
                     .listRowBackground(Color.clear)
+                if !model.missing.isEmpty { missingSection }
                 let blocks = model.blockingNow
                 if !blocks.isEmpty {
                     Section("Blocking now") {
@@ -59,7 +63,7 @@ struct HomeTab: View {
                     }
                     .buttonStyle(.plain)
                 } footer: {
-                    Text(model.lockInActive ? "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks."
+                    Text(model.lockInActive ? "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks, apps and websites."
                                             : "Freeze every rule for days. No early exit.")
                 }
                 .listRowBackground(Palette.card)
@@ -80,9 +84,86 @@ struct HomeTab: View {
             .navigationTitle("Arc Lock")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
+            .confirmationDialog(Text(confirmRestore?.plan.kind == .place ? "Restore this place block?" : "This block starts right away"),
+                                isPresented: Binding(get: { confirmRestore != nil }, set: { if !$0 { confirmRestore = nil } }),
+                                titleVisibility: .visible, presenting: confirmRestore) { r in
+                if let until = Self.startsNow(r) {
+                    Button("Restore and lock until \(Fmt.moment(until, now: model.now))") { restore(r) }
+                } else {
+                    Button("Restore") { restore(r) }
+                }
+            } message: { r in
+                if let until = Self.startsNow(r) {
+                    Text("Its hours include the current time, so it starts now and can't be changed until \(Fmt.moment(until, now: model.now)).")
+                } else {
+                    Text("It starts whenever you're at one of its places on a day it runs — right away if you're there now.")
+                }
+            }
             #if DEBUG
             .onAppear { if Demo.shot == "lockin" || Demo.shot == "lockin-confirm" { showLockIn = true } }
             #endif
+        }
+    }
+
+    /// Blocks an older version lost after an update (AppModel.missing), each one restorable as it was.
+    private var missingSection: some View {
+        Section {
+            ForEach(model.missing) { r in
+                HStack(spacing: 12) {
+                    Image(systemName: Self.icon(r.plan.kind)).foregroundStyle(Palette.brass).frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        BlockName(rule: r).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(Self.kindName(r.plan.kind)).font(.p(13, .regular, .footnote)).foregroundStyle(Palette.muted)
+                    }
+                    Spacer(minLength: 8)
+                    Button("Restore") {
+                        if Self.startsNow(r) != nil || r.plan.kind == .place { confirmRestore = r } else { restore(r) }
+                    }
+                    .buttonStyle(.borderless)
+                    .fontWeight(.semibold)
+                    .tint(Palette.brass)
+                }
+                .font(.p(16, .regular))
+            }
+            Button("Don't restore these") { model.dismissMissing() }
+                .tint(Palette.muted)
+        } header: {
+            Text("Missing blocks")
+        } footer: {
+            Text("These blocks were saved before an update, but they're not in your list anymore. If you didn't delete them yourself, restore them here.")
+        }
+        .listRowBackground(Palette.card)
+    }
+
+    private func restore(_ r: Rule) {
+        switch model.restore(r.id) {
+        case .refused(let why): model.problem = why
+        default: model.toast = String(localized: "Restored. It works again from now on.")
+        }
+    }
+
+    /// A schedule whose hours include now starts the moment it's restored: until when.
+    static func startsNow(_ r: Rule) -> Date? {
+        guard r.plan.kind == .schedule, r.plan.isOn else { return nil }
+        if case .running(let until) = Status.of(r.plan, now: Date(), reachedAt: nil, calendar: .current) { return until }
+        return nil
+    }
+
+    static func icon(_ kind: RuleKind) -> String {
+        switch kind {
+        case .schedule: "calendar.badge.clock"
+        case .limit: "hourglass"
+        case .timeout: "cup.and.saucer"
+        case .place: "mappin.and.ellipse"
+        }
+    }
+
+    static func kindName(_ kind: RuleKind) -> LocalizedStringKey {
+        switch kind {
+        case .schedule: "Schedule"
+        case .limit: "Daily limit"
+        case .timeout: "Time-out"
+        case .place: "Place block"
         }
     }
 }
@@ -193,7 +274,9 @@ struct UsageLine: View {
         let s = rule.selection
         // the block's own day: from its last reset to the next (midnight to midnight by default)
         let period = DateInterval(start: model.periodStart(rule.plan), end: model.nextReset(rule.plan))
-        return DeviceActivityFilter(segment: .hourly(during: period), devices: .init([.iPhone]),
+        // this device's use only: a block counts what's used on the device it's set on (an iPad's own, an iPhone's own)
+        let here: DeviceActivityData.Device.Model = UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+        return DeviceActivityFilter(segment: .hourly(during: period), devices: .init([here]),
                                     applications: s.applicationTokens, categories: s.categoryTokens, webDomains: s.webDomainTokens)
     }
 }

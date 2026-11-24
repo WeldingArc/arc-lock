@@ -78,7 +78,7 @@ final class ActivityMonitor: DeviceActivityMonitor {
         }
         // Registered for a different version of the rule (a change applied at its reset, or by an older version of
         // Arc Lock): these thresholds don't mean what they say — re-register, don't block.
-        guard let registered = Monitoring.registration(id), registered.serves(Monitoring.plan(for: rule, now: now).registration),
+        guard let registered = Monitoring.registration(id), registered.serves(Monitoring.plan(for: rule, now: now).registration, now: now),
               let tenth = Names.tenth(of: event), let minutes = registered.thresholds[event.rawValue] else {
             Diag.log("  → registered for a different version: re-sync")
             Monitoring.sync(state, now: now)
@@ -96,7 +96,17 @@ final class ActivityMonitor: DeviceActivityMonitor {
             return
         }
         if rule.plan.kind == .timeout {
-            guard tenth >= 10, (Breaks.until(id) ?? .distantPast) <= now else { Diag.log("  → already on a break"); return }
+            let onBreak = (Breaks.until(id) ?? .distantPast) > now
+            guard tenth >= 10 else {
+                // the way through this stretch of use: kept if the time-out is registered again before its break
+                // (an app added, fresh app tokens), so that doesn't hand out a fresh stretch (Monitoring.credit)
+                if !onBreak {
+                    Marks.raise(id, to: tenth, now: now, period: Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: .current))
+                }
+                Diag.log("  → time-out at tenth \(tenth)")
+                return
+            }
+            guard !onBreak else { Diag.log("  → already on a break"); return }
             Diag.log("  → break for \(rule.plan.breakMinutes) min")
             Monitoring.startBreak(rule, now: now)
             let back = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))

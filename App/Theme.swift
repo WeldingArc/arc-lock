@@ -74,8 +74,28 @@ extension Font.TextStyle {
 
 extension View {
     /// A native list or form on the theme's background (rows use `.listRowBackground(Palette.card)`).
+    /// On a wide screen (an iPad in full screen) the rows keep a comfortable reading width in the middle.
     func themedList() -> some View {
-        scrollContentBackground(.hidden).background(Backdrop())
+        modifier(ReadableWidth()).scrollContentBackground(.hidden).background(Backdrop())
+    }
+}
+
+/// The kind of device Arc Lock runs on, for the few lines that name it ("this iPhone", "this iPad").
+enum Device {
+    static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+}
+
+/// Lists and forms wider than `maxWidth` get side room, so rows don't stretch edge to edge on an iPad. On an iPhone
+/// (narrower) nothing changes: the extra room is zero. Measured inside the safe area, so a list inside a view that
+/// already has the room doesn't get it twice.
+struct ReadableWidth: ViewModifier {
+    var maxWidth: CGFloat = 700
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaPadding(.horizontal, max(0, (width - maxWidth) / 2))
+            .onGeometryChange(for: CGFloat.self) { $0.size.width - $0.safeAreaInsets.leading - $0.safeAreaInsets.trailing } action: { width = $0 }
     }
 }
 

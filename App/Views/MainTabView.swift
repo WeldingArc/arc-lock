@@ -1,9 +1,11 @@
+import FamilyControls
 import SwiftUI
 
 enum AppTab: Hashable { case home, blocks, settings }
 
 /// The app once it's set up: Home, Blocks and Settings in the standard bottom tab bar (compact Liquid Glass on iOS 26
-/// and later), with a small glass Block now button floating above it on Home and Blocks.
+/// and later), with a small glass Block now button floating above it on Home and Blocks. On an iPad the tabs sit at the
+/// top, and can become a sidebar (Apple's iPad tab bar).
 struct MainTabView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showBlockNow = false
@@ -21,6 +23,7 @@ struct MainTabView: View {
                 SettingsTab()
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .sheet(isPresented: $showBlockNow) { BlockNowSheet().environmentObject(model) }
         .sheet(isPresented: $showSession) { SessionSheet().environmentObject(model) }
         #if DEBUG
@@ -97,6 +100,9 @@ struct SessionSheet: View {
     @State private var confirmStop = false
     /// Why Stop was refused, shown by this sheet itself (see problemAlert).
     @State private var refusal: String?
+    /// The picker's choice when adding to the running Block now (it starts from what's blocked; nothing is taken out).
+    @State private var adding = FamilyActivitySelection()
+    @State private var showPicker = false
 
     var body: some View {
         NavigationStack {
@@ -107,6 +113,9 @@ struct SessionSheet: View {
                         LabeledContent("Time left") { Text(durationText(s.endsAt.timeIntervalSince(model.now))) }
                         if !s.selection.isEmpty { TokenIcons(selection: s.selection, max: 8).padding(.vertical, 4) }
                         if !s.domains.isEmpty { LabeledContent("Websites") { Text(s.domains.joined(separator: ", ")) } }
+                        Button("Add apps & websites") { adding = s.selection; showPicker = true }
+                    } footer: {
+                        Text("You can add apps and websites while it runs, but not take any out.")
                     }
                     .listRowBackground(Palette.card)
                     Section {
@@ -128,6 +137,11 @@ struct SessionSheet: View {
             .navigationTitle("Block now")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .familyActivityPicker(headerText: String(localized: "Choose apps, categories and websites to add."),
+                                  isPresented: $showPicker, selection: $adding)
+            .onChange(of: adding) { _, picked in
+                if case .refused(let why) = model.addToSession(picked) { refusal = why }
+            }
             .confirmationDialog(Text("Stop Block now?"), isPresented: $confirmStop, titleVisibility: .visible) {
                 Button("Stop Block now", role: .destructive) {
                     switch model.stopSession() {

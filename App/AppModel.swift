@@ -30,6 +30,8 @@ final class AppModel: ObservableObject {
     /// first unlock after a restart, and iOS can keep answering empty until Arc Lock starts again. The app asks for
     /// that instead of showing setup (whose last step must never save over the real blocks, so it can't finish).
     @Published private(set) var needsRelaunch = false
+    /// Blocks an older version lost (MissingBlocks): Home offers them back until each is restored or dismissed.
+    @Published private(set) var missing: [Rule] = []
 
     /// Debug screenshots: sample state, fixed clock, no Screen Time calls.
     private var demo = false
@@ -212,7 +214,9 @@ final class AppModel: ObservableObject {
     }
     /// Every block keeps a monitor and a store slot; iOS allows an app 20 monitors, so Arc Lock keeps up to 18 blocks.
     var canAddRule: Bool { canAdd(.limit) }
-    func canAdd(_ kind: RuleKind) -> Bool { Capacity.fits(state.rules.map(\.plan) + [RulePlan(kind: kind)]) }
+    func canAdd(_ kind: RuleKind) -> Bool {
+        Capacity.fits(state.rules.map(\.plan) + [RulePlan(kind: kind)], reserved: state.unreadRules.count)
+    }
 
     /// Blocks holding something right now, soonest end first. A place block running until you leave has no end:
     /// its `until` is `.distantFuture` (shown as "until you leave").
@@ -245,6 +249,7 @@ final class AppModel: ObservableObject {
         state = s
         now = Date()
         checkStale()
+        missing = MissingBlocks.list(missingFrom: s)
         guard isAuthorized else { return }
         report(Monitoring.sync(s))
         Monitoring.finishBreaks(s)
@@ -389,7 +394,7 @@ final class AppModel: ObservableObject {
             return .saved
         }
         if lockInActive, let until = state.lockInUntil {
-            return .refused(Self.lockedMessage(until: until, reason: .lockIn, now: now))
+            return .refused(Self.lockInSettingMessage(until: until))
         }
         guard let at = state.strictHoldsEnd(now: now, calendar: calendar, status: { self.status($0) }), at > now else {
             commit { $0.deletionProtection = false; $0.deletionProtectionOffAt = nil }
@@ -411,7 +416,7 @@ final class AppModel: ObservableObject {
             return .saved
         }
         if lockInActive, let until = state.lockInUntil {
-            return .refused(Self.lockedMessage(until: until, reason: .lockIn, now: now))
+            return .refused(Self.lockInSettingMessage(until: until))
         }
         let at = now
         commit { $0.switchStrictOff(now: at, calendar: calendar, status: { self.status($0) }) }
@@ -476,7 +481,7 @@ final class AppModel: ObservableObject {
             guard let p = r.pending?.plan, Capacity.activities(for: [p]) > Capacity.activities(for: [r.plan]) else { return r.plan }
             return p
         }
-        guard Capacity.fits(others + [plan]) else {
+        guard Capacity.fits(others + [plan], reserved: id == nil ? state.unreadRules.count : 0) else {
             return .refused(String(localized: "iOS lets one app watch only so many blocks: up to \(Capacity.maxRules), and a time-out counts as two. Delete one first."))
         }
         if plan.kind == .place {
@@ -489,77 +494,150 @@ final class AppModel: ObservableObject {
             commit { $0.rules.append(Rule(plan: plan, selection: selection)) }
             return .saved
         }
-        let dir = Change.direction(from: existing.plan, to: plan,
-                                   selectionLost: selection.lost(from: existing.selection),
-                                   selectionGained: selection.gained(over: existing.selection))
+        let lost = selection.lost(from: existing.selection), gained = selection.gained(over: existing.selection)
+        let dir = Change.direction(from: existing.plan, to: plan, selectionLost: lost, selectionGained: gained)
         switch access(existing) {
         case .locked(let until, let reason):
-            return .refused(Self.lockedMessage(until: until, reason: reason, now: now))
+            // Running with Strict lock, used up, on a break or during a lock-in: more apps and websites still apply
+            // at once (only stricter), nothing else does.
+            guard Change.onlyAdds(from: existing.plan, to: plan, selectionLost: lost, selectionGained: gained) else {
+                return .refused(Self.lockedMessage(until: until, reason: reason, now: now))
+            }
+            return apply(plan, selection, to: existing, keepPending: true)
         case .stricterOnly(let from) where dir == .looser:
+            // The editor shows the change waiting for the reset; if this save only adds apps or websites to it, those
+            // apply to the running version now (and the waiting change keeps them), like any addition.
+            if let waiting = existing.pending, let waitingPlan = waiting.plan {
+                let waitingSelection = waiting.selection ?? existing.selection
+                if Change.onlyAdds(from: waitingPlan, to: plan, selectionLost: selection.lost(from: waitingSelection),
+                                   selectionGained: selection.gained(over: waitingSelection)) {
+                    let added = selection.subtracting(waitingSelection)
+                    let addedDomains = plan.domains.filter { !waitingPlan.domains.contains($0) }
+                    var running = existing.plan
+                    for d in addedDomains where !running.domains.contains(d) { running.domains.append(d) }
+                    // (an app the waiting change takes out and you put back stays in it, too)
+                    return apply(running, existing.selection.adding(added), to: existing, keepPending: true,
+                                 pendingAdditions: (added, addedDomains))
+                }
+            }
             commit { st in
                 guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
                 st.rules[i].pending = RuleChange(plan: plan, selection: selection, effectiveAt: from)
             }
             return .scheduled(from)
         default:
-            // A new threshold, new apps or a new reset time make iOS count the block again. A daily limit then counts
-            // its whole day, use from before the change included (Monitoring.plan): a stricter limit applies at once,
-            // and locks at once if that use already fills it.
-            let restarts = plan.kind.countsUse && existing.plan.kind == plan.kind &&
-                (plan.limitMinutes != existing.plan.limitMinutes || selection != existing.selection || plan.resetAt != existing.plan.resetAt)
-            if restarts, !demo, plan.kind == .timeout || !Monitoring.countsEarlierUse(plan, id: id, now: now),
-               case .stricterOnly(let from) = access(existing) {
-                // A time-out counts its stretch of use from registration (iOS reports only the break threshold), and so
-                // does a limit right after its reset time changed or with a reset off the hour: a restart would hand out
-                // use already counted. It waits for the block's next reset.
-                commit { st in
-                    guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
-                    st.rules[i].pending = RuleChange(plan: plan, selection: selection, effectiveAt: from)
-                }
-                return .scheduled(from)
+            return apply(plan, selection, to: existing, keepPending: false)
+        }
+    }
+
+    /// Applies a saved change now. `keepPending` = only apps or websites were added to a locked block: a change
+    /// already waiting for its reset stays queued and gets the same additions (`pendingAdditions`, or else what's new
+    /// over the running version), so they aren't undone when it lands.
+    private func apply(_ plan: RulePlan, _ selection: FamilyActivitySelection, to existing: Rule, keepPending: Bool,
+                       pendingAdditions: (FamilyActivitySelection, [String])? = nil) -> Outcome {
+        let id = existing.id
+        // iOS silently shields nothing for a set over its cap: neither the running version nor a waiting change that
+        // gets the additions may go over it
+        var merged: RuleChange?
+        if keepPending, let p = existing.pending {
+            merged = p.adding(pendingAdditions?.0 ?? selection.subtracting(existing.selection),
+                              domains: pendingAdditions?.1 ?? plan.domains.filter { !existing.plan.domains.contains($0) })
+        }
+        func overCap(_ s: FamilyActivitySelection?, _ domains: [String]?) -> Bool {
+            (s.map { $0.applicationTokens.count > Limits.maxApps || $0.webDomainTokens.count > Limits.maxDomains } ?? false)
+                || (domains?.count ?? 0) > Limits.maxDomains
+        }
+        if overCap(selection, plan.domains) || overCap(merged?.selection, merged?.plan?.domains) {
+            return .refused(String(localized: "Choose at most \(Limits.maxApps) apps and \(Limits.maxDomains) websites — or pick whole categories instead."))
+        }
+        let lost = selection.lost(from: existing.selection)
+        // A new threshold, new apps or a new reset time make iOS count the block again. A daily limit then counts its
+        // whole day, use from before the change included (Monitoring.plan): a stricter limit applies at once, and locks
+        // at once if that use already fills it. A time-out — or a limit counting from registration, right after its
+        // reset time changed — keeps the use its marks prove (Monitoring.credit): its count goes on, not over.
+        let restarts = plan.kind.countsUse && existing.plan.kind == plan.kind &&
+            (plan.limitMinutes != existing.plan.limitMinutes || selection != existing.selection || plan.resetAt != existing.plan.resetAt)
+        // a block that becomes strict runs again, even if it was stopped by hand
+        if !demo && state.isStrict(plan, id: id, now: now) && !state.isStrict(existing.plan, id: id, now: now) { Stops.clear(id) }
+        // a place block with another place, ending or days starts over: iOS says again where you are
+        let placeRestarts = !demo && existing.plan.kind == .place && PlaceRules.restartsVisit(from: existing.plan, to: plan)
+        if placeRestarts {
+            PlaceVisits.clear(id)
+            Monitoring.stopPlaceEnd(id)
+        }
+        defer { if placeRestarts { PlaceWatcher.shared.recheck(id) } }
+        var breakNow = false
+        if restarts && !demo {
+            let newPeriod = plan.resetAt != existing.plan.resetAt
+            // a limit's new reset time: the new day may have begun before now, with use the old day already counted —
+            // it counts from now until its first reset under the new time (Monitoring.plan)
+            if newPeriod && plan.kind == .limit {
+                FreshCounts.set(id, until: Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
             }
-            // a block that becomes strict runs again, even if it was stopped by hand
-            if !demo && state.isStrict(plan, id: id, now: now) && !state.isStrict(existing.plan, id: id, now: now) { Stops.clear(id) }
-            // a place block with another place, ending or days starts over: iOS says again where you are
-            let placeRestarts = !demo && existing.plan.kind == .place && PlaceRules.restartsVisit(from: existing.plan, to: plan)
-            if placeRestarts {
-                PlaceVisits.clear(id)
-                Monitoring.stopPlaceEnd(id)
+            // the use so far this period (a time-out: this stretch of use), as its marks prove it, goes on counting: the
+            // bar shows it until iOS reports the new count, and a count that starts at registration starts from it
+            // (Monitoring.credit). Not when an app was taken out (its use may be in there) or a new period begins. The
+            // same limit keeps its mark exactly (LimitMath.carriedLevel), so adding apps never hands time out again.
+            var level = 0
+            if existing.plan.isOn, Engine.counts(existing, now: now, calendar: calendar) {
+                level = LimitMath.carriedLevel(level: usageLevel(existing), oldLimit: existing.plan.limitMinutes,
+                                               newLimit: plan.limitMinutes, selectionLost: lost, startsOver: newPeriod)
             }
-            defer { if placeRestarts { PlaceWatcher.shared.recheck(id) } }
-            if restarts && !demo && plan.kind == .limit {
-                // a new reset time: the new day may have begun before now, with use the old day already counted —
-                // it counts from now until its first reset under the new time (Monitoring.plan)
-                if plan.resetAt != existing.plan.resetAt {
-                    FreshCounts.set(id, until: Period.end(after: now, resetAt: plan.resetAt, calendar: calendar))
-                }
-                // iOS reports the new count moments after the save; until then the bar keeps what today's marks prove,
-                // where that use still counts: the new count includes earlier use, and no app was taken out
-                var used = 0
-                if existing.plan.isOn, Engine.counts(existing, now: now, calendar: calendar), !selection.lost(from: existing.selection),
-                   Monitoring.countsEarlierUse(plan, id: id, now: now) {
-                    used = LimitMath.usedAtLeast(level: usageLevel(existing), limit: existing.plan.limitMinutes)
-                }
-                Marks.clear(id)
-                Credits.clear(id)          // carried-over use from versions before 1.1.1: the new count includes it
-                let level = LimitMath.level(forUsed: used, limit: plan.limitMinutes)
-                if plan.isOn && level > 0 { Marks.raise(id, to: level, now: now, period: periodStart(plan)) }
+            Marks.clear(id)
+            Credits.clear(id)          // carried-over use from versions before 1.1.1: the new count includes it
+            if plan.isOn && level > 0 {
+                // a time-out made shorter than the use so far: its break is due now
+                if plan.kind == .timeout && level >= 10 { breakNow = true }
+                else { Marks.raise(id, to: level, now: now, period: periodStart(plan)) }
             }
-            // A limit or time-out that starts counting today because of this change (today added to its days): iOS
-            // kept counting while it rested, and a threshold it passed then (ignored) isn't reported again today, so
-            // it's registered again — a limit then counts today's use at once, a time-out from now.
-            var updated = existing
-            updated.plan = plan
-            let startsCounting = !demo && plan.kind.countsUse && Engine.counts(updated, now: now, calendar: calendar)
-                && !Engine.counts(existing, now: now, calendar: calendar)
-            commit(force: startsCounting ? [id] : []) { st in
-                guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
-                st.rules[i].plan = plan
-                st.rules[i].selection = selection
+        }
+        // A limit or time-out that starts counting today because of this change (today added to its days): iOS kept
+        // counting while it rested, and a threshold it passed then (ignored) isn't reported again today, so it's
+        // registered again — a limit then counts today's use at once, a time-out from now.
+        var updated = existing
+        updated.plan = plan
+        let startsCounting = !demo && plan.kind.countsUse && Engine.counts(updated, now: now, calendar: calendar)
+            && !Engine.counts(existing, now: now, calendar: calendar)
+        commit(force: startsCounting ? [id] : []) { st in
+            guard let i = st.rules.firstIndex(where: { $0.id == id }) else { return }
+            st.rules[i].plan = plan
+            st.rules[i].selection = selection
+            if keepPending, let p = st.rules[i].pending {
+                let more = pendingAdditions ?? (selection.subtracting(existing.selection), plan.domains.filter { !existing.plan.domains.contains($0) })
+                st.rules[i].pending = merged ?? p.adding(more.0, domains: more.1)
+            } else {
                 st.rules[i].pending = nil
             }
-            return .saved
         }
+        if breakNow, let rule = state.rules.first(where: { $0.id == id }), (Breaks.until(id) ?? .distantPast) <= now {
+            Monitoring.startBreak(rule, now: now)
+            // as for a break the monitor starts: a time-out still keeping Strict lock after it was switched off stays
+            // strict until this break ends, even past its reset
+            let back = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
+            if !state.strictLock, let held = state.strictUntil[id.uuidString], held > now, held < back {
+                commit { _ = $0.holdThroughBreak(id, until: back, now: now) }
+            }
+            Engine.reconcile(state, now: now)
+            toast = L("Time for a %@ break. Back at %@.", minutesText(rule.plan.breakMinutes), Fmt.time(back))
+        }
+        return .saved
+    }
+
+    /// Puts a lost block back as it was saved (a change it had waiting is dropped), checked like a new block. It starts
+    /// working at once.
+    func restore(_ id: UUID) -> Outcome {
+        guard let r = missing.first(where: { $0.id == id }) else { return .saved }
+        let outcome = save(plan: r.plan, selection: r.selection, id: nil)
+        if case .refused = outcome { return outcome }
+        if !demo { MissingBlocks.markHandled([id]) }
+        missing.removeAll { $0.id == id }
+        return outcome
+    }
+
+    /// Stops offering the lost blocks back (they stay in the backup copy).
+    func dismissMissing() {
+        if !demo { MissingBlocks.markHandled(missing.map(\.id)) }
+        missing = []
     }
 
     func delete(_ id: UUID) -> Outcome {
@@ -631,6 +709,24 @@ final class AppModel: ObservableObject {
         return .saved
     }
 
+    /// Adds apps and websites to the running Block now. Always allowed — even with Strict lock or during a lock-in —
+    /// since it only blocks more; nothing can be taken out and its end stays.
+    func addToSession(_ more: FamilyActivitySelection) -> Outcome {
+        if !demo { now = Date() }
+        guard let s = activeSession else { return .refused(String(localized: "Block now isn't running.")) }
+        let merged = s.selection.adding(more)
+        if merged.applicationTokens.count > Limits.maxApps || merged.webDomainTokens.count > Limits.maxDomains {
+            return .refused(String(localized: "Choose at most \(Limits.maxApps) apps and \(Limits.maxDomains) websites — or pick whole categories instead."))
+        }
+        guard merged != s.selection else { return .saved }
+        commit { st in
+            guard st.session?.id == s.id else { return }
+            st.session?.selection = merged
+            st.lastSessionSelection = merged
+        }
+        return .saved
+    }
+
     // MARK: lock-in
 
     /// Why a lock-in of `days` days can't start now, or nil when it can (asked before the warning and the hold).
@@ -676,7 +772,24 @@ final class AppModel: ObservableObject {
         case .atPlace: return String(localized: "This block runs until you leave. It can't be changed before then.")
         case .reached: return String(localized: "This limit is used up. It can't be changed until \(when).")
         case .onBreak: return String(localized: "This time-out is on a break. It can't be changed until \(when).")
-        case .lockIn: return String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). Rules can't be changed until then.")
+        case .lockIn: return String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). Until then you can only add apps and websites to a block.")
+        }
+    }
+
+    /// A setting (Strict lock, deletion protection) refused during a lock-in.
+    static func lockInSettingMessage(until: Date) -> String {
+        String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). This setting can't be changed until then.")
+    }
+
+    /// The editor's note on a locked block: what can't change until when, and that apps and websites can still be added.
+    static func addOnlyMessage(until: Date, reason: LockReason, now: Date) -> String {
+        let when = Fmt.moment(until, now: now)
+        switch reason {
+        case .running, .session: return String(localized: "This block is running. You can add apps and websites now; nothing else can change until \(when).")
+        case .atPlace: return String(localized: "This block runs until you leave. You can add apps and websites now; nothing else can change before then.")
+        case .reached: return String(localized: "This limit is used up. You can add apps and websites now; nothing else can change until \(when).")
+        case .onBreak: return String(localized: "This time-out is on a break. You can add apps and websites now; nothing else can change until \(when).")
+        case .lockIn: return String(localized: "You're locked in through \(Fmt.lastDay(endingAt: until)). You can add apps and websites now; nothing else can change until then.")
         }
     }
 

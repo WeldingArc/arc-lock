@@ -1,5 +1,5 @@
-"""App Store screenshots with a caption: 1320x2868 (6.9" iPhone), RGB, no alpha.
-Usage: python3 tools/make_marketing.py <raw-shots-dir> <out-dir>
+"""App Store screenshots with a caption: 1320x2868 (6.9" iPhone) or, with --ipad, 2064x2752 (13" iPad); RGB, no alpha.
+Usage: python3 tools/make_marketing.py <raw-shots-dir> <out-dir> [ko] [--ipad]
 Raw shots come from the simulator in demo mode (see README: -demo YES -shot <name>)."""
 import os
 import sys
@@ -53,6 +53,9 @@ SHOTS_KO = {
 }
 
 W, H = 1320, 2868
+# sizes for the iPhone page; --ipad switches to the 13" iPad page (raw shots from the iPad Pro 13-inch simulator)
+P = dict(title=104, sub=46, shot_w=990, radius=64, title_y=210, bottom=96, glow=900)
+IPAD = dict(W=2064, H=2752, title=112, sub=50, shot_w=1560, radius=40, title_y=180, bottom=110, glow=1300)
 INK, MUTED, BRASS = (233, 230, 223), (154, 161, 177), (200, 169, 106)
 
 
@@ -64,7 +67,7 @@ def background():
         t = y / H
         d.line([(0, y), (W, y)], fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
     glow = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(glow).ellipse([W / 2 - 900, -1100, W / 2 + 900, 700], fill=60)
+    ImageDraw.Draw(glow).ellipse([W / 2 - P["glow"], -1100, W / 2 + P["glow"], 700], fill=60)
     glow = glow.filter(ImageFilter.GaussianBlur(220))
     img = Image.composite(Image.new("RGB", (W, H), BRASS), img, glow.point(lambda v: int(v * 0.55)))
     return img
@@ -81,18 +84,18 @@ def centered(d, y, text, font, fill, spacing):
 def compose(raw, title, sub):
     img = background()
     d = ImageDraw.Draw(img)
-    size = 104
+    size = P["title"]
     while d.textlength(title, font=FONT("Light", size)) > W - 140:
         size -= 2
-    y = centered(d, 210 + (104 - size) // 2, title, FONT("Light", size), INK, 0)
-    centered(d, y + 42, sub, FONT("Regular", 46), MUTED, 18)
+    y = centered(d, P["title_y"] + (P["title"] - size) // 2, title, FONT("Light", size), INK, 0)
+    centered(d, y + 42, sub, FONT("Regular", P["sub"]), MUTED, 18)
 
     shot = Image.open(raw).convert("RGB")
-    sw = 990
+    sw = P["shot_w"]
     sh = round(shot.height * sw / shot.width)
     shot = shot.resize((sw, sh), Image.LANCZOS)
-    x, top = (W - sw) // 2, H - sh - 96
-    radius = 64
+    x, top = (W - sw) // 2, H - sh - P["bottom"]
+    radius = P["radius"]
     mask = Image.new("L", (sw, sh), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, sw - 1, sh - 1], radius=radius, fill=255)
     shadow = Image.new("L", (W, H), 0)
@@ -106,8 +109,13 @@ def compose(raw, title, sub):
 
 
 def main():
-    raw_dir, out_dir = sys.argv[1], sys.argv[2]
-    korean = len(sys.argv) > 3 and sys.argv[3] == "ko"
+    global W, H
+    args = [a for a in sys.argv[1:] if a != "--ipad"]
+    if "--ipad" in sys.argv:
+        W, H = IPAD["W"], IPAD["H"]
+        P.update({k: v for k, v in IPAD.items() if k not in ("W", "H")})
+    raw_dir, out_dir = args[0], args[1]
+    korean = len(args) > 2 and args[2] == "ko"
     os.makedirs(out_dir, exist_ok=True)
     for i, (name, title, sub) in enumerate(SHOTS, 1):
         if korean:

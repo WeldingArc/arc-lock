@@ -30,12 +30,14 @@ struct LockInConfirm: View {
                         .font(.p(16, .regular))
                         .foregroundStyle(locked ? Palette.brass : Palette.muted)
                     if !locked {
-                        // what a lock-in does (Core Policy: every block is locked; only new blocks can be added)
+                        // what a lock-in does (Core Policy: every block is locked; blocks, apps and websites can only be
+                        // added — Change.onlyAdds)
                         Card {
                             VStack(alignment: .leading, spacing: 16) {
-                                point("trash.slash", "Arc Lock can't be deleted, and neither can any other app on this iPhone.")
+                                point("trash.slash", Device.isPad ? "Arc Lock can't be deleted, and neither can any other app on this iPad."
+                                                                    : "Arc Lock can't be deleted, and neither can any other app on this iPhone.")
                                 point("lock.shield", "This setting can't be changed: the lock-in can only be made longer, never shorter or turned off, and Strict lock stays on until it ends.")
-                                point("lock", "Every block stays exactly as it is, and blocks you stopped start again. None can be stopped, changed or deleted.")
+                                point("lock", "Blocks you stopped start again, and none can be stopped, loosened or deleted. You can only add apps and websites to them.")
                                 point("calendar", "There's no early exit. It ends on its own after \(through).")
                                 point("plus.circle", "You can still add new blocks.")
                             }

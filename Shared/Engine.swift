@@ -59,13 +59,16 @@ struct Registration: Codable, Equatable {
     var limit: Int
     /// Event name → minutes after the count starts.
     var thresholds: [String: Int]
-    /// The day a credit was applied (thresholds were only valid that day). Versions before 1.1.1 carried use over
-    /// this way; now always nil.
+    /// With `credit`: the start of the period the credit belongs to (its thresholds hold only then). Versions before
+    /// 1.1.1 set it without `credit` (a daily limit's carried-over use); such a registration is registered again.
     var creditDay: Date?
     var selection: FamilyActivitySelection
     /// true = the events count use from before the monitor was registered (daily limits: the whole period). nil in
     /// registrations saved before 1.1.1, which count from the registration only.
     var pastActivity: Bool? = nil
+    /// Minutes of use already proven when this count began (a time-out, or a limit counting from registration,
+    /// registered again mid-way — Monitoring.credit): the thresholds are what's left. nil = none.
+    var credit: Int? = nil
 
     /// Whether this registration serves `wanted`: the same rule, thresholds and apps, counted the same way. A daily limit
     /// that should count its whole day (`wanted.pastActivity` true) but was registered to count from registration — by
@@ -73,10 +76,28 @@ struct Registration: Codable, Equatable {
     /// again: iOS can stop reporting such a count altogether (Josh's iPhone, 2026-11-23: a 45-min limit from the day
     /// before, Instagram well past it, not one report). Registered anew it counts the whole day, so a limit already
     /// used up locks at once; the saved registration then counts the whole day, so this happens once.
-    func serves(_ wanted: Registration) -> Bool {
+    /// A registration with a credit (counting on from use already proven) serves the plain one for the rest of the
+    /// period it was given in: its thresholds are the rest of the same limit. After the block's reset it doesn't.
+    func serves(_ wanted: Registration, now: Date = Date(), calendar: Calendar = .current) -> Bool {
         if pastActivity != true && wanted.pastActivity == true { return false }
         var mine = self
         mine.pastActivity = wanted.pastActivity
+        // a schedule's monitor has no events: the apps it blocks don't matter to it (reconcile shields them). Not
+        // registering it again for new apps keeps iOS from ending its interval early (ActivityMonitor.intervalDidEnd).
+        if kind == .schedule { mine.selection = wanted.selection }
+        if let credit = mine.credit, credit > 0 {
+            guard Counting.creditHolds(creditDay: mine.creditDay, resetAt: start, now: now, calendar: calendar) else { return false }
+            mine.credit = wanted.credit
+            mine.creditDay = wanted.creditDay
+            mine.thresholds = wanted.thresholds
+        }
+        // A time-out registered by 1.1.1 or earlier has one event, at the break, and no tenths: the same break, so it
+        // keeps serving until that break registers it again (Monitoring.finishBreaks). Registering it anew right after
+        // the update would start its stretch over, and its break would be read as one from another version — skipped.
+        if kind == .timeout, mine.credit == nil, mine.thresholds == [Names.limitEvent.rawValue: limit],
+           wanted.thresholds[Names.limitEvent.rawValue] == limit {
+            mine.thresholds = wanted.thresholds
+        }
         return mine == wanted
     }
 }
@@ -84,8 +105,12 @@ struct Registration: Codable, Equatable {
 enum Monitoring {
     struct Plan { let schedule: DeviceActivitySchedule; let events: [DeviceActivityEvent.Name: DeviceActivityEvent]; let registration: Registration }
 
-    static func plan(for rule: Rule, now: Date = Date()) -> Plan {
+    /// `credit` = minutes of use already proven in the current period (a time-out: its current stretch), for a count
+    /// that starts at registration: the thresholds are then what's left (see `credit(for:)`). A daily limit that
+    /// counts its whole day ignores it — iOS counts the earlier use itself.
+    static func plan(for rule: Rule, now: Date = Date(), credit: Int = 0, calendar: Calendar = .current) -> Plan {
         let p = rule.plan
+        let periodStart = Period.start(containing: now, resetAt: p.resetAt, calendar: calendar)
         switch p.kind {
         case .schedule:
             let schedule = DeviceActivitySchedule(intervalStart: p.start.components, intervalEnd: p.end.components,
@@ -99,20 +124,22 @@ enum Monitoring {
             // (or made stricter) after its time is used up locks at once, not only after its next reset. Right after
             // its reset time changed (FreshCounts), or with a reset off the hour, it counts from registration.
             let past = countsEarlierUse(p, id: rule.id, now: now)
+            let carried = past ? 0 : max(0, credit)
             let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
                                                   repeats: true,
                                                   warningTime: p.limitMinutes >= 10 ? DateComponents(minute: 5) : nil)
             var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
             var thresholds: [String: Int] = [:]
-            for t in LimitMath.thresholds(limit: p.limitMinutes) {
+            for t in LimitMath.thresholds(limit: p.limitMinutes, credit: carried) {
                 let name = Names.event(tenth: t.tenth)
                 events[name] = event(rule.selection, minutes: t.minutes, past: past)
                 thresholds[name.rawValue] = t.minutes
             }
             return Plan(schedule: schedule, events: events,
                         registration: Registration(kind: .limit, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
-                                                   thresholds: thresholds, creditDay: nil, selection: rule.selection,
-                                                   pastActivity: past))
+                                                   thresholds: thresholds, creditDay: carried > 0 ? periodStart : nil,
+                                                   selection: rule.selection, pastActivity: past,
+                                                   credit: carried > 0 ? carried : nil))
         case .place:
             // never registered (sync skips place blocks: iOS reports places to the app, not to a monitor)
             return Plan(schedule: DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0),
@@ -121,15 +148,37 @@ enum Monitoring {
                         registration: Registration(kind: .place, start: .midnight, end: TimeOfDay(23, 59), limit: 0, thresholds: [:],
                                                    creditDay: nil, selection: rule.selection))
         case .timeout:
-            // one threshold: the use allowed before a break, counted from registration (re-registered after each break)
+            // the use allowed before a break, counted from registration (registered again after each break), in tenths:
+            // "limit" starts the break, p1…p9 mark the way, so a time-out registered again mid-stretch (an app added,
+            // fresh app tokens) counts on from what's used instead of starting a fresh stretch
+            let carried = max(0, credit)
             let schedule = DeviceActivitySchedule(intervalStart: p.resetAt.components, intervalEnd: p.resetAt.minuteBefore.components,
                                                   repeats: true,
                                                   warningTime: p.limitMinutes >= 3 ? DateComponents(minute: 1) : nil)
-            return Plan(schedule: schedule, events: [Names.limitEvent: event(rule.selection, minutes: p.limitMinutes, past: false)],
+            var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
+            var thresholds: [String: Int] = [:]
+            for t in LimitMath.thresholds(limit: p.limitMinutes, credit: carried) {
+                let name = Names.event(tenth: t.tenth)
+                events[name] = event(rule.selection, minutes: t.minutes, past: false)
+                thresholds[name.rawValue] = t.minutes
+            }
+            return Plan(schedule: schedule, events: events,
                         registration: Registration(kind: .timeout, start: p.resetAt, end: p.resetAt.minuteBefore, limit: p.limitMinutes,
-                                                   thresholds: [Names.limitEvent.rawValue: p.limitMinutes], creditDay: nil,
-                                                   selection: rule.selection))
+                                                   thresholds: thresholds, creditDay: carried > 0 ? periodStart : nil,
+                                                   selection: rule.selection, credit: carried > 0 ? carried : nil))
         }
+    }
+
+    /// Use (minutes) already proven, by its marks, in a block's current count when that count starts at registration:
+    /// a time-out's stretch of use (its marks are cleared when a break starts and ends), or a daily limit counting from
+    /// registration (right after its reset time changed, or off the hour). Registering it again mid-way — an edit,
+    /// fresh app tokens, a re-arm — then counts on from there instead of handing out that time again. Zero for a
+    /// limit that counts its whole day: iOS counts the earlier use itself.
+    static func credit(for rule: Rule, now: Date = Date(), calendar: Calendar = .current) -> Int {
+        let p = rule.plan
+        guard p.kind.countsUse, !countsEarlierUse(p, id: rule.id, now: now) else { return 0 }
+        let level = Marks.level(rule.id, period: Period.start(containing: now, resetAt: p.resetAt, calendar: calendar))
+        return LimitMath.usedAtLeast(level: level, limit: p.limitMinutes)
     }
 
     /// Whether a daily limit (with this plan) registered now counts its whole period, earlier use included (Core
@@ -207,13 +256,16 @@ enum Monitoring {
             }
         }
 
-        for (name, (rule, p)) in wanted {
-            if have.contains(name), !force.contains(rule.id), registration(rule.id)?.serves(p.registration) == true { continue }
+        for (name, (rule, wantedPlan)) in wanted {
+            if have.contains(name), !force.contains(rule.id), registration(rule.id)?.serves(wantedPlan.registration, now: now) == true { continue }
+            // a count that starts at registration keeps the use its marks prove (credit(for:))
+            let given = credit(for: rule, now: now)
+            let p = given > 0 ? plan(for: rule, now: now, credit: given) : wantedPlan
             do {
                 try center.startMonitoring(name, during: p.schedule, events: p.events)
                 if let d = try? JSONEncoder().encode(p.registration) { AppGroup.defaults.set(d, forKey: regKey(rule.id)) }
                 AppGroup.defaults.set(now, forKey: regAtKey(rule.id))
-                Diag.log("registered \(name.rawValue) (\(p.events.count) events)")
+                Diag.log("registered \(name.rawValue) (\(p.events.count) events\(given > 0 ? ", \(given) min used" : ""))")
             } catch {
                 Diag.log("register \(name.rawValue) FAILED: \(error)")
                 errors.append(error)
@@ -259,6 +311,7 @@ enum Monitoring {
         let end = now.addingTimeInterval(TimeInterval(rule.plan.breakMinutes * 60))
         Breaks.set(rule.id, until: end)
         Stops.clear(rule.id)          // a stop belonged to an earlier break; this one blocks
+        Marks.clear(rule.id)          // this stretch of use is over; the next one starts after the break
         let start = min(now.addingTimeInterval(-60), end.addingTimeInterval(-16 * 60))
         let comps: Set<Calendar.Component> = [.hour, .minute, .second]
         let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(comps, from: start),
@@ -284,6 +337,7 @@ enum Monitoring {
         guard !done.isEmpty else { return false }
         for r in done {
             Breaks.clear(r.id)
+            Marks.clear(r.id)         // a new stretch of use: its count starts at zero (Monitoring.credit)
             resetRearms(r.id)
             Diag.log("break over for \(r.id.uuidString.prefix(8))")
         }
