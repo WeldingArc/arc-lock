@@ -1,5 +1,5 @@
 // Runs in the background when a schedule starts or ends, when a daily limit passes a threshold, at each block's
-// reset, and at midnight.
+// reset, at midnight, and when an emergency relief ends.
 // It applies and lifts the shields even while Arc Lock itself is closed. Before the first unlock after a restart the
 // saved state can't be read (it loads as never set up, see ArcState.isSetUp): then every shield and monitor stays as
 // it is, and the next callback or opening Arc Lock catches up.
@@ -17,6 +17,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
         defer { Self.serial.unlock() }
         super.intervalDidStart(for: activity)
         Diag.log("start \(activity.rawValue)")
+        // An emergency relief's start: the app has just lifted the shields itself. A read this soon after its write
+        // could still find the relief off and shield again, so this one is left alone.
+        if activity == Names.relief { return }
         let (state, changed) = Engine.housekeep()
         guard state.isSetUp else { return }
         // The daily monitor, and a block's own reset (its interval start), register again what changed for the new
@@ -33,7 +36,12 @@ final class ActivityMonitor: DeviceActivityMonitor {
         super.intervalDidEnd(for: activity)
         Diag.log("end \(activity.rawValue)")
         var (state, _) = Engine.housekeep()
-        guard state.isSetUp else { return }
+        guard state.isSetUp else {
+            // An emergency relief ended before the first unlock after a restart: nothing can be read, so its shields
+            // can't come back yet. Its monitor looks again in 15 minutes.
+            if activity == Names.relief, !StateStore.isSaved { Monitoring.retryReliefEnd() }
+            return
+        }
         var skip = Set<UUID>()
         if let id = Names.ruleID(activity), let rule = state.rules.first(where: { $0.id == id }), rule.plan.kind == .schedule {
             // The window is over — lift it now even if this callback came a moment early. An end while the window
@@ -47,6 +55,20 @@ final class ActivityMonitor: DeviceActivityMonitor {
                 Diag.log("  → still runs \(Int(left / 60)) min: an older interval's end, left to reconcile")
             }
         }
+        // The emergency relief's 30 minutes are over: its blocks come back now, even if this callback came a moment
+        // early. An end with more than a few minutes still to run belongs to an older interval: reconcile decides.
+        var reliefOver = false
+        if activity == Names.relief, let until = Relief.until {
+            let left = until.timeIntervalSinceNow
+            if left <= 5 * 60 {
+                Relief.close()
+                reliefOver = true
+                DeviceActivityCenter().stopMonitoring([Names.relief])     // its job is done: free the activity
+                Diag.log("  → relief over")
+            } else {
+                Diag.log("  → relief still runs \(Int(left / 60)) min: an older interval's end, left to reconcile")
+            }
+        }
         // A time-out's break is over: lift it and start counting toward the next one. Then look again at what was
         // waiting for it to end (deletion protection may switch off once a strict break is over).
         if Monitoring.finishBreaks(state, slack: Names.breakRuleID(activity) != nil ? Engine.edge : 0) {
@@ -56,6 +78,9 @@ final class ActivityMonitor: DeviceActivityMonitor {
         }
         // A Block-now end is left to reconcile: it only lifts the session that is really over, never a newer one.
         Engine.reconcile(state, skip: skip)
+        if reliefOver, Engine.anythingBlocking(StateStore.load()) {
+            Notify.post(id: "relief.end", title: L("Emergency relief is over"), body: L("Your blocks are back on."))
+        }
     }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
@@ -124,11 +149,17 @@ final class ActivityMonitor: DeviceActivityMonitor {
         Diag.log("  → limit at tenth \(tenth)")
         Marks.raise(id, to: tenth, now: now, period: Period.start(containing: now, resetAt: rule.plan.resetAt, calendar: .current))
         if tenth >= 10 {
+            // during an emergency relief this shields nothing yet: the limit locks when the relief ends
             if let store = Engine.store(for: id, in: state) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule, now: now))
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: store, hold: state.isStrict(rule, now: now), now: now)
             }
             let reset = Period.end(after: now, resetAt: rule.plan.resetAt, calendar: .current)
-            Notify.post(id: "reached.\(id)", title: rule.plan.displayName, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))
+            if state.reliefEnabled, Relief.isActive(now: now), let back = Relief.until, back < reset {
+                Notify.post(id: "reached.\(id)", title: rule.plan.displayName,
+                            body: L("This limit is used up. It locks when emergency relief ends, at %@.", Fmt.time(back)))
+            } else {
+                Notify.post(id: "reached.\(id)", title: rule.plan.displayName, body: L("This limit is used up. It unlocks at %@.", Fmt.moment(reset)))
+            }
         }
         Engine.reconcile(state, now: now)
     }

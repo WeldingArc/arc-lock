@@ -1,7 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Settings as a native form: Strict lock, deletion protection, heads-ups, Appearance (theme and app icon), About.
+/// Settings as a native form: Strict lock, deletion protection, emergency relief, heads-ups, Appearance (theme and
+/// app icon), About.
 struct SettingsTab: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
@@ -18,6 +19,7 @@ struct SettingsTab: View {
                 Form {
                     strictSection
                     protectionSection
+                    reliefSection
                     Section {
                         Toggle("Heads-up notifications", isOn: Binding(get: { model.state.headsUp }, set: { on in
                             model.setHeadsUp(on)
@@ -127,6 +129,43 @@ struct SettingsTab: View {
                                   : "No app can be deleted from this iPhone, Arc Lock included. Turning it off waits until your strict blocks running or counting now reset or end.")
             } else {
                 Text(Device.isPad ? "No app can be deleted from this iPad, Arc Lock included." : "No app can be deleted from this iPhone, Arc Lock included.")
+            }
+        }
+        .listRowBackground(Palette.card)
+    }
+
+    // MARK: emergency relief
+
+    /// Emergency relief (AppModel.setRelief), off by default. Switching it on waits like deletion protection's
+    /// switch-off (shown with its time, and "Keep it off" to cancel); switching it off works at once and ends a running
+    /// relief. While on, its monitor keeps one block's place: up to 17 blocks.
+    private var reliefSection: some View {
+        Section {
+            Toggle("Emergency relief", isOn: Binding(get: { model.state.reliefEnabled || model.state.reliefOnAt != nil },
+                                                     set: { on in
+                                                         let ending = !on && model.reliefActive
+                                                         switch model.setRelief(on) {
+                                                         case .refused(let why): model.problem = why
+                                                         case .scheduled(let at): model.toast = String(localized: "Emergency relief turns on at \(Fmt.moment(at, now: model.now)).")
+                                                         case .saved:
+                                                             if ending { model.toast = String(localized: "Emergency relief is off. Your blocks are back on.") }
+                                                         }
+                                                     }))
+            if !model.state.reliefEnabled, let on = model.state.reliefOnAt {
+                HStack {
+                    // a lock-in started since holds it until it's over
+                    Text("Turns on at \(Fmt.moment(model.lockInActive ? max(on, model.state.lockInUntil ?? on) : on, now: model.now))")
+                        .foregroundStyle(Palette.brass)
+                    Spacer()
+                    Button("Keep it off") { _ = model.setRelief(false) }.buttonStyle(.borderless)
+                }
+                .font(.p(15, .regular, .subheadline))
+            }
+        } footer: {
+            if !model.state.reliefEnabled && (model.state.strictLock || !model.heldRules.isEmpty || model.sessionHeld) {
+                Text("Once every \(ReliefRules.refillDays) days, lift every block for \(ReliefRules.minutes) minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. Turning it on waits until your strict blocks running or counting now reset or end. While it's on, you can have up to \(Capacity.maxRules(relief: true)) blocks.")
+            } else {
+                Text("Once every \(ReliefRules.refillDays) days, lift every block for \(ReliefRules.minutes) minutes from Home, strict blocks and lock-ins included. It opens apps and websites only. While it's on, you can have up to \(Capacity.maxRules(relief: true)) blocks.")
             }
         }
         .listRowBackground(Palette.card)
@@ -265,7 +304,9 @@ struct LockInSheet: View {
                     VStack(spacing: 20) {
                         ArcMark(size: 64).padding(.top, 12)
                         Text("Lock in").font(.p(32, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
-                        Text("For the days you choose, no rule can be loosened, stopped or deleted — you can only add to them — and no app can be deleted. There is no early exit.")
+                        Text(model.state.reliefEnabled
+                             ? "For the days you choose, no rule can be loosened, stopped or deleted (you can only add to them), and no app can be deleted. The lock-in can't be ended early, but emergency relief still works."
+                             : "For the days you choose, no rule can be loosened, stopped or deleted (you can only add to them), and no app can be deleted. There is no early exit.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
                         HStack(spacing: 8) {
                             ForEach(choices, id: \.self) { d in

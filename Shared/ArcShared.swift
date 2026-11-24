@@ -63,6 +63,12 @@ struct ArcState: Codable, Equatable {
     /// After Strict lock was switched off: the blocks that keep it (rule or Block-now id → until when). Each one that
     /// was running or counting keeps its lock until its own reset, or until its run ends (StrictHold).
     var strictUntil: [String: Date] = [:]
+    /// Emergency relief (1.2.1, Core ReliefRules): a setting, off by default, also for anyone updating. Switching it on
+    /// waits like every loosening (`reliefOnAt`); switching it off applies at once and ends a running relief.
+    var reliefEnabled = false
+    /// A switch-on that waits until the strict blocks running or counting then have reset or ended, and any lock-in
+    /// is over (Engine.housekeep applies it).
+    var reliefOnAt: Date?
     /// Rule id → store slot. iOS allows an app 50 named stores in total, so rules reuse a fixed pool of slots.
     var slots: [String: Int] = [:]
     /// Set when some saved rule couldn't be read (never saved itself): the raw data is kept before overwriting.
@@ -76,9 +82,13 @@ struct ArcState: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case rules, session, lockInUntil, lastSessionSelection, lastSessionMinutes, headsUp, onboarded, slots
         case deletionProtection, deletionProtectionOffAt, strictLock, strictLockOffAt, strictUntil
+        case reliefEnabled, reliefOnAt
     }
 
     init() {}
+
+    /// Emergency relief is on, or waiting to switch on: its one-off monitor keeps one block's place (Core Capacity).
+    var reliefKeepsSlot: Bool { reliefEnabled || reliefOnAt != nil }
 
     /// Whether this state may be acted on (shields, monitors, housekeeping) or written back (Core: `SavedState`).
     /// Before the first unlock after a restart iOS can't read the shared state and it loads as never set up; a real
@@ -127,15 +137,16 @@ struct ArcState: Codable, Equatable {
     }
 
     /// When every strict block that is running or counting now has reset or ended (each at its own time); nil when
-    /// none is. Switching deletion protection off waits for this.
-    func strictHoldsEnd(now: Date, calendar: Calendar, status: (Rule) -> RuleStatus) -> Date? {
+    /// none is. Switching deletion protection off waits for this, and so does switching emergency relief on
+    /// (`untilLeave`: a place block running until you leave counts too, at its latest end, since a relief would lift it).
+    func strictHoldsEnd(now: Date, calendar: Calendar, status: (Rule) -> RuleStatus, untilLeave: Bool = false) -> Date? {
         var ends: [Date] = []
         for r in rules where r.plan.strict && isStrict(r, now: now) {
             guard var until = StrictHold.until(r.plan, status: status(r), now: now, calendar: calendar) else { continue }
             if !strictLock, let held = strictUntil[r.id.uuidString] { until = min(until, held) }
             // a place block running until you leave: its end isn't known (its own shield keeps apps from being
-            // deleted while it runs), so it doesn't hold this switch for up to 12 hours
-            if r.plan.kind == .place && r.plan.untilLeave { continue }
+            // deleted while it runs), so it doesn't hold deletion protection's switch for up to 12 hours
+            if r.plan.kind == .place && r.plan.untilLeave && !untilLeave { continue }
             ends.append(until)
         }
         if let s = session, s.endsAt > now, isStrict(s, now: now) { ends.append(s.endsAt) }
@@ -180,6 +191,9 @@ struct ArcState: Codable, Equatable {
         strictLock = (try? c.decode(Bool.self, forKey: .strictLock)) ?? true
         strictLockOffAt = try? c.decode(Date.self, forKey: .strictLockOffAt)
         strictUntil = (try? c.decode([String: Date].self, forKey: .strictUntil)) ?? [:]
+        // saved by a version before 1.2.1: off, until switched on in Settings
+        reliefEnabled = (try? c.decode(Bool.self, forKey: .reliefEnabled)) ?? false
+        reliefOnAt = try? c.decode(Date.self, forKey: .reliefOnAt)
     }
 
     /// Like the synthesized encoding (nil fields left out), with the blocks this version can't read written back
@@ -201,6 +215,8 @@ struct ArcState: Codable, Equatable {
         try c.encode(strictLock, forKey: .strictLock)
         try c.encodeIfPresent(strictLockOffAt, forKey: .strictLockOffAt)
         try c.encode(strictUntil, forKey: .strictUntil)
+        try c.encode(reliefEnabled, forKey: .reliefEnabled)
+        try c.encodeIfPresent(reliefOnAt, forKey: .reliefOnAt)
     }
 }
 
@@ -440,9 +456,45 @@ enum Stops {
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id.uuidString)) }
 }
 
+/// The emergency relief (1.2.1, Core ReliefRules): when the last one started, when its blocks come back, and when the
+/// next one can be used. Written by the app, read by every process: while it runs, Shielding.apply writes no shields
+/// (a strict block still holds the device), so the app, the monitor extension and the block screen's button all lift
+/// and restore the same way. One starts only while the setting is on (ArcState.reliefEnabled); switching it off
+/// closes a running one, and so does Engine.reconcile if it ever finds one with the setting off.
+enum Relief {
+    private static let startKey = "relief.start"
+    private static let untilKey = "relief.until"
+    private static let nextKey = "relief.next"
+    static var lastStart: Date? { AppGroup.defaults.object(forKey: startKey) as? Date }
+    static var until: Date? { AppGroup.defaults.object(forKey: untilKey) as? Date }
+    static var next: Date? { AppGroup.defaults.object(forKey: nextKey) as? Date }
+    /// Whether the blocks are lifted at `now` (one ending within Engine.edge counts as over).
+    static func isActive(now: Date = Date()) -> Bool { ReliefRules.isActive(until: until, now: now, edge: Engine.edge) }
+
+    struct Saved { let start: Date?, until: Date?, next: Date? }
+    static var saved: Saved { Saved(start: lastStart, until: until, next: next) }
+    static func begin(start: Date, until: Date, next: Date) {
+        AppGroup.defaults.set(start, forKey: startKey)
+        AppGroup.defaults.set(until, forKey: untilKey)
+        AppGroup.defaults.set(next, forKey: nextKey)
+    }
+    /// The relief is over (its end came, ActivityMonitor, or the setting went off) and its blocks are back: its end is
+    /// forgotten, so that's said only once. When the next one comes stays: switching off and on gives no new one.
+    static func close() { AppGroup.defaults.removeObject(forKey: untilKey) }
+    /// Puts back what was saved before `begin` (its end monitor couldn't start, so it never ran).
+    static func restore(_ s: Saved) {
+        func put(_ d: Date?, _ key: String) { if let d { AppGroup.defaults.set(d, forKey: key) } else { AppGroup.defaults.removeObject(forKey: key) } }
+        put(s.start, startKey)
+        put(s.until, untilKey)
+        put(s.next, nextKey)
+    }
+}
+
 enum Names {
     static let session = DeviceActivityName("session")
     static let daily = DeviceActivityName("daily")
+    /// The emergency relief: a one-off monitor whose end brings every block's shields back, even if Arc Lock stays closed.
+    static let relief = DeviceActivityName("relief")
     static let limitEvent = DeviceActivityEvent.Name("limit")
     /// Usage events: "p1"…"p9" = tenths of the limit, "limit" = the limit itself (tenth 10).
     static func event(tenth: Int) -> DeviceActivityEvent.Name { tenth >= 10 ? limitEvent : .init("p\(tenth)") }
@@ -541,6 +593,13 @@ enum Fmt {
         let f = DateFormatter()
         f.locale = .current
         f.setLocalizedDateFormatFromTemplate(d.timeIntervalSince(now) < 6 * 86400 ? "EEEjmm" : "MMMd")
+        return f.string(from: d)
+    }
+    /// A day and time further off ("Thu, Dec 24, 14:05"): when the next emergency relief can be used.
+    static func dayAndTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("EEEMMMdjmm")
         return f.string(from: d)
     }
     /// The last day of a span that ends at a midnight ("through Mon, Oct 19").

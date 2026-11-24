@@ -682,6 +682,63 @@ struct CoreTests {
         check(Counting.creditHolds(creditDay: Period.start(containing: afternoon, resetAt: fourAM, calendar: seoul), resetAt: fourAM,
                                    now: date("2026-10-13 03:30", seoul), calendar: seoul), "a 4 AM reset: 3:30 the next night is the same period")
 
+        // Emergency relief (1.2.1): 30 minutes, the next one 30 days after the last one started, one at most
+        let reliefStart = date("2026-11-25 23:50", seoul)
+        let relief = ReliefRules.plan(startingAt: reliefStart, calendar: seoul)
+        check(relief.until == date("2026-11-26 00:20", seoul), "a relief lasts 30 minutes, past midnight too")
+        check(relief.next == date("2026-12-25 23:50", seoul), "the next relief comes 30 days after the last one started")
+        check(ReliefRules.isActive(until: relief.until, now: reliefStart), "a relief lifts the blocks right away")
+        check(ReliefRules.isActive(until: relief.until, now: date("2026-11-26 00:18", seoul)), "…and 2 minutes before its end")
+        check(!ReliefRules.isActive(until: relief.until, now: relief.until.addingTimeInterval(-30)),
+              "a callback 30 s before the end brings the shields back (edge)")
+        check(!ReliefRules.isActive(until: relief.until, now: date("2026-11-26 00:21", seoul)), "over after its end")
+        check(!ReliefRules.isActive(until: nil, now: reliefStart), "never used: not active")
+        check(ReliefRules.isAvailable(next: nil, now: reliefStart), "never used: available")
+        check(!ReliefRules.isAvailable(next: relief.next, now: date("2026-12-25 23:49", seoul)), "a minute before the refill: not yet")
+        check(ReliefRules.isAvailable(next: relief.next, now: relief.next), "on the refill date: available again")
+        check(ReliefRules.refusal(until: nil, next: nil, anythingBlocked: true, now: reliefStart) == nil, "first relief with a block running: allowed")
+        check(ReliefRules.refusal(until: nil, next: nil, anythingBlocked: false, now: reliefStart) == .nothingBlocked, "nothing blocked: nothing to lift")
+        check(ReliefRules.refusal(until: relief.until, next: relief.next, anythingBlocked: true, now: date("2026-11-26 00:05", seoul))
+              == .running(until: relief.until), "a second tap while one runs: refused, says until when")
+        check(ReliefRules.refusal(until: relief.until, next: relief.next, anythingBlocked: true, now: date("2026-12-01 12:00", seoul))
+              == .notYet(relief.next), "used this month: the next comes on its refill date (at most one waits)")
+        check(ReliefRules.refusal(until: relief.until, next: relief.next, anythingBlocked: true, now: date("2026-12-26 09:00", seoul)) == nil,
+              "after the refill: allowed again")
+        let newYork = calendar("America/New_York")
+        let springAhead = ReliefRules.plan(startingAt: date("2027-03-01 09:00", newYork), calendar: newYork)
+        check(springAhead.next == date("2027-03-31 09:00", newYork), "30 calendar days across a clock change keep the time of day")
+
+        // Emergency relief is a setting, off by default (1.2.1): while on, its monitor takes one block's place
+        check(Capacity.maxRules(relief: false) == 18 && Capacity.maxRules(relief: true) == 17, "18 blocks with relief off, 17 with it on")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 18)), "relief off: 18 limits still fit")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 18), relief: true), "relief on: 18 limits don't")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 17), relief: true), "relief on: 17 limits fit")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 17) + [offShorts], relief: true), "relief on: a switched-off block still keeps its place")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 16) + [shorts], relief: true), "relief on: 16 limits and a time-out need 18 monitors, too many")
+        check(Capacity.fits(Array(repeating: limitPlan, count: 15) + [shorts], relief: true), "relief on: 15 limits and a time-out fit")
+        check(Capacity.fits(Array(repeating: shorts, count: 8) + [limitPlan], relief: true), "relief on: 8 time-outs and a limit fit")
+        check(!Capacity.fits(Array(repeating: shorts, count: 9), relief: true), "relief on: 9 time-outs don't")
+        check(!Capacity.fits(Array(repeating: limitPlan, count: 16), reserved: 1, relief: true), "relief on: an unreadable block kept counts too")
+        let onNoon = date("2026-11-25 12:00", seoul), onFive = date("2026-11-25 17:00", seoul)
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: nil, fits: true, now: onNoon) == .now, "no strict block running: on right away")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onFive, fits: true, now: onNoon) == .at(onFive),
+              "a strict block running until 5 PM: on at 5 PM")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onNoon, fits: true, now: onNoon) == .now, "a hold ending now: on right away")
+        let onLockIn = date("2026-11-28 00:00", seoul)
+        check(ReliefRules.switchOn(lockInUntil: onLockIn, strictHoldsEnd: nil, fits: true, now: onNoon) == .lockedIn(until: onLockIn),
+              "never switched on during a lock-in")
+        check(ReliefRules.switchOn(lockInUntil: onNoon.addingTimeInterval(-60), strictHoldsEnd: nil, fits: true, now: onNoon) == .now,
+              "a lock-in that's over doesn't hold it")
+        check(ReliefRules.switchOn(lockInUntil: nil, strictHoldsEnd: onFive, fits: false, now: onNoon) == .full,
+              "too many blocks: one must go first, before any waiting")
+        check(!ReliefRules.switchOnDue(nil, lockInUntil: nil, now: onNoon), "nothing waiting: nothing to apply")
+        check(!ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: onNoon), "waiting for 5 PM: not at noon")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: onFive.addingTimeInterval(-30)), "a callback 30 s early still applies it (edge)")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: nil, now: date("2026-11-25 18:00", seoul)), "applied once its time has passed")
+        check(!ReliefRules.switchOnDue(onFive, lockInUntil: onLockIn, now: date("2026-11-26 09:00", seoul)),
+              "a lock-in started since holds it until it ends")
+        check(ReliefRules.switchOnDue(onFive, lockInUntil: onLockIn, now: onLockIn), "…and it applies once the lock-in is over")
+
         print(failures == 0 ? "OK — \(checks) checks passed" : "\(failures) of \(checks) checks FAILED")
         exit(failures == 0 ? 0 : 1)
     }
