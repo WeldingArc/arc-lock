@@ -440,9 +440,43 @@ enum Stops {
     static func clear(_ id: UUID) { AppGroup.defaults.removeObject(forKey: key(id.uuidString)) }
 }
 
+/// The emergency relief (1.2.1, Core ReliefRules): when the last one started, when its blocks come back, and when the
+/// next one can be used. Written by the app, read by every process: while it runs, Shielding.apply writes no shields
+/// (a strict block still holds the device), so the app, the monitor extension and the block screen's button all lift
+/// and restore the same way.
+enum Relief {
+    private static let startKey = "relief.start"
+    private static let untilKey = "relief.until"
+    private static let nextKey = "relief.next"
+    static var lastStart: Date? { AppGroup.defaults.object(forKey: startKey) as? Date }
+    static var until: Date? { AppGroup.defaults.object(forKey: untilKey) as? Date }
+    static var next: Date? { AppGroup.defaults.object(forKey: nextKey) as? Date }
+    /// Whether the blocks are lifted at `now` (one ending within Engine.edge counts as over).
+    static func isActive(now: Date = Date()) -> Bool { ReliefRules.isActive(until: until, now: now, edge: Engine.edge) }
+
+    struct Saved { let start: Date?, until: Date?, next: Date? }
+    static var saved: Saved { Saved(start: lastStart, until: until, next: next) }
+    static func begin(start: Date, until: Date, next: Date) {
+        AppGroup.defaults.set(start, forKey: startKey)
+        AppGroup.defaults.set(until, forKey: untilKey)
+        AppGroup.defaults.set(next, forKey: nextKey)
+    }
+    /// The relief is over and its blocks are back (ActivityMonitor): its end is forgotten, so that's said only once.
+    static func close() { AppGroup.defaults.removeObject(forKey: untilKey) }
+    /// Puts back what was saved before `begin` (its end monitor couldn't start, so it never ran).
+    static func restore(_ s: Saved) {
+        func put(_ d: Date?, _ key: String) { if let d { AppGroup.defaults.set(d, forKey: key) } else { AppGroup.defaults.removeObject(forKey: key) } }
+        put(s.start, startKey)
+        put(s.until, untilKey)
+        put(s.next, nextKey)
+    }
+}
+
 enum Names {
     static let session = DeviceActivityName("session")
     static let daily = DeviceActivityName("daily")
+    /// The emergency relief: a one-off monitor whose end brings every block's shields back, even if Arc Lock stays closed.
+    static let relief = DeviceActivityName("relief")
     static let limitEvent = DeviceActivityEvent.Name("limit")
     /// Usage events: "p1"…"p9" = tenths of the limit, "limit" = the limit itself (tenth 10).
     static func event(tenth: Int) -> DeviceActivityEvent.Name { tenth >= 10 ? limitEvent : .init("p\(tenth)") }
@@ -541,6 +575,13 @@ enum Fmt {
         let f = DateFormatter()
         f.locale = .current
         f.setLocalizedDateFormatFromTemplate(d.timeIntervalSince(now) < 6 * 86400 ? "EEEjmm" : "MMMd")
+        return f.string(from: d)
+    }
+    /// A day and time further off ("Thu, Dec 24, 14:05"): when the next emergency relief can be used.
+    static func dayAndTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("EEEMMMdjmm")
         return f.string(from: d)
     }
     /// The last day of a span that ends at a midnight ("through Mon, Oct 19").

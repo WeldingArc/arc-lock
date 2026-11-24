@@ -843,3 +843,48 @@ public enum Counting {
         return abs(day.timeIntervalSince(Period.start(containing: now, resetAt: resetAt, calendar: calendar))) < 1
     }
 }
+
+// MARK: - Emergency relief (1.2.1)
+
+/// One emergency relief: every block's shields lift for `minutes`, then come back on their own. The next one comes
+/// `refillDays` after the last one started, and at most one is ever waiting (Josh, 1.2.1). It changes no rule, no
+/// lock-in and no setting: deletion protection and the clock lock stay as they are, and use still counts.
+public enum ReliefRules {
+    public static let minutes = 30
+    public static let refillDays = 30
+
+    /// A relief starting at `start`: when its shields come back, and when the next one can be used.
+    public static func plan(startingAt start: Date, calendar: Calendar) -> (until: Date, next: Date) {
+        let until = start.addingTimeInterval(TimeInterval(minutes * 60))
+        let next = calendar.date(byAdding: .day, value: refillDays, to: start)
+            ?? start.addingTimeInterval(TimeInterval(refillDays * 24 * 3600))
+        return (until, next)
+    }
+
+    /// Whether a relief running until `until` still lifts the blocks at `now`. One ending within `edge` counts as over
+    /// (like a block's end, Engine.edge), so a callback a moment early still brings the shields back.
+    public static func isActive(until: Date?, now: Date, edge: TimeInterval = 60) -> Bool {
+        guard let until else { return false }
+        return until.timeIntervalSince(now) > edge
+    }
+
+    /// Whether a relief can be used at `now`: none used yet, or its refill date has come.
+    public static func isAvailable(next: Date?, now: Date) -> Bool { (next ?? .distantPast) <= now }
+
+    public enum Refusal: Equatable, Sendable {
+        /// One is lifting the blocks already, until then.
+        case running(until: Date)
+        /// The last one was used; the next comes then.
+        case notYet(Date)
+        /// Nothing is blocked, so there's nothing to lift.
+        case nothingBlocked
+    }
+
+    /// Why a relief can't start at `now`, or nil when it can.
+    public static func refusal(until: Date?, next: Date?, anythingBlocked: Bool, now: Date, edge: TimeInterval = 60) -> Refusal? {
+        if let until, isActive(until: until, now: now, edge: edge) { return .running(until: until) }
+        if let next, !isAvailable(next: next, now: now) { return .notYet(next) }
+        if !anythingBlocked { return .nothingBlocked }
+        return nil
+    }
+}

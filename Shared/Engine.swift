@@ -1,6 +1,7 @@
 // Applying and lifting blocks. Each rule shields through its own ManagedSettingsStore (a slot from a fixed pool),
 // so overlapping blocks never undo each other: iOS combines all stores and keeps the strictest value. While a store
 // shields something it also stops app deletion and manual clock changes; those settings vanish with the block.
+// During an emergency relief (Relief) every store's shields stay off, but those holds stay as they are.
 import DeviceActivity
 import FamilyControls
 import Foundation
@@ -8,22 +9,38 @@ import ManagedSettings
 import UserNotifications
 
 enum Shielding {
-    /// `hold` = a strict block: also stop app deletion and manual clock changes while it shields.
-    static func apply(_ selection: FamilyActivitySelection, domains: [String], to name: ManagedSettingsStore.Name, hold: Bool = true) {
+    /// `hold` = a strict block: also stop app deletion and manual clock changes while it shields. Every path that
+    /// shields comes through here, so during an emergency relief (Relief, at `now`) none does: the apps and websites
+    /// stay open, while a strict block still stops app deletion and manual clock changes.
+    static func apply(_ selection: FamilyActivitySelection, domains: [String], to name: ManagedSettingsStore.Name, hold: Bool = true,
+                      now: Date = Date()) {
         let store = ManagedSettingsStore(named: name)
-        let apps = selection.applicationTokens, cats = selection.categoryTokens, webs = selection.webDomainTokens
-        store.shield.applications = apps.isEmpty ? nil : apps
-        store.shield.applicationCategories = cats.isEmpty ? nil : .specific(cats)
-        store.shield.webDomains = webs.isEmpty ? nil : webs
-        store.shield.webDomainCategories = cats.isEmpty ? nil : .specific(cats)
-        let typed = Set(domains.map { WebDomain(domain: $0) })
-        store.webContent.blockedByFilter = typed.isEmpty ? nil : .specific(typed)
+        if Relief.isActive(now: now) {
+            clearShields(store)
+        } else {
+            let apps = selection.applicationTokens, cats = selection.categoryTokens, webs = selection.webDomainTokens
+            store.shield.applications = apps.isEmpty ? nil : apps
+            store.shield.applicationCategories = cats.isEmpty ? nil : .specific(cats)
+            store.shield.webDomains = webs.isEmpty ? nil : webs
+            store.shield.webDomainCategories = cats.isEmpty ? nil : .specific(cats)
+            let typed = Set(domains.map { WebDomain(domain: $0) })
+            store.webContent.blockedByFilter = typed.isEmpty ? nil : .specific(typed)
+        }
         if hold {
             holdDevice(store)
         } else {
             store.application.denyAppRemoval = nil
             store.dateAndTime.requireAutomaticDateAndTime = nil
         }
+    }
+
+    /// Nothing shielded in this store (apps, categories, picked and typed websites); its holds stay as they are.
+    static func clearShields(_ store: ManagedSettingsStore) {
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+        store.shield.webDomainCategories = nil
+        store.webContent.blockedByFilter = nil
     }
 
     /// No deleting apps (including Arc Lock) and no setting the clock by hand.
@@ -245,9 +262,11 @@ enum Monitoring {
             $0.plan.isOn && $0.plan.kind == .place && PlaceRules.isRunning(PlaceVisits.get($0.id), now: now)
         }
         let livePlaces = Set(runningPlaces.map { Names.placeActivity($0.id) })
+        // a running emergency relief keeps its one-off end monitor: its end brings the shields back
+        let reliefLive = (Relief.until ?? .distantPast) > now
         // stale monitors go first: at iOS's 20-monitor cap a missing one couldn't start before they're gone
         let stale = have.filter { $0 != Names.session && $0 != Names.daily && wanted[$0] == nil && !liveBreaks.contains($0)
-            && !livePlaces.contains($0) && !Diag.probeNames.contains($0) }
+            && !livePlaces.contains($0) && !(reliefLive && $0 == Names.relief) && !Diag.probeNames.contains($0) }
         if !stale.isEmpty { center.stopMonitoring(Array(stale)) }
         for rule in runningPlaces where !have.contains(Names.placeActivity(rule.id)) {
             let visit = PlaceVisits.get(rule.id)
@@ -368,6 +387,31 @@ enum Monitoring {
         DeviceActivityCenter().stopMonitoring([Names.placeActivity(id)])
     }
 
+    /// One-off monitor whose end brings the shields back after an emergency relief, even if Arc Lock stays closed
+    /// (ActivityMonitor.intervalDidEnd). Like a Block-now session's, it starts a minute in the past, with clock
+    /// components only. Throws when iOS won't watch one more activity (all 20 in use): the relief can't start then.
+    static func startRelief(from start: Date, until end: Date, calendar: Calendar = .current) throws {
+        let comps: Set<Calendar.Component> = [.hour, .minute, .second]
+        let begin = min(start.addingTimeInterval(-60), end.addingTimeInterval(-16 * 60))
+        let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(comps, from: begin),
+                                              intervalEnd: calendar.dateComponents(comps, from: end), repeats: false)
+        let center = DeviceActivityCenter()
+        center.stopMonitoring([Names.relief])
+        try center.startMonitoring(Names.relief, during: schedule)
+    }
+
+    /// The relief's end came while Arc Lock's data couldn't be read (before the first unlock after a restart), so its
+    /// shields couldn't come back yet: look again in 15 minutes, and again after that, until they can.
+    static func retryReliefEnd(now: Date = Date(), calendar: Calendar = .current) {
+        let comps: Set<Calendar.Component> = [.hour, .minute, .second]
+        let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(comps, from: now.addingTimeInterval(-60)),
+                                              intervalEnd: calendar.dateComponents(comps, from: now.addingTimeInterval(15 * 60)),
+                                              repeats: false)
+        let center = DeviceActivityCenter()
+        center.stopMonitoring([Names.relief])
+        try? center.startMonitoring(Names.relief, during: schedule)
+    }
+
     /// One-off monitor whose end lifts a Block-now session even if the app is never opened again. The start is a
     /// minute in the past and only clock components are used: a start of exactly "now" can slip to tomorrow.
     static func startSession(_ s: FocusSession, calendar: Calendar = .current) throws {
@@ -403,14 +447,14 @@ enum Engine {
             }
             if skip.contains(rule.id) { continue }
             if isBlocking(rule, now: now, calendar: calendar) {
-                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name, hold: state.isStrict(rule, now: now))
+                Shielding.apply(rule.selection, domains: rule.plan.domains, to: name, hold: state.isStrict(rule, now: now), now: now)
             } else {
                 Shielding.clear(name)
             }
         }
         let sessionOn = state.session.map { $0.endsAt.timeIntervalSince(now) > edge && $0.startedAt <= now.addingTimeInterval(edge) } ?? false
         if let s = state.session, sessionOn {
-            Shielding.apply(s.selection, domains: s.domains, to: Names.sessionStore, hold: state.isStrict(s, now: now))
+            Shielding.apply(s.selection, domains: s.domains, to: Names.sessionStore, hold: state.isStrict(s, now: now), now: now)
         } else {
             Shielding.clear(Names.sessionStore)
         }
@@ -438,6 +482,12 @@ enum Engine {
         if let until = status.blockingUntil { return until.timeIntervalSince(now) > edge }
         if case .waiting(let next?) = status, next.timeIntervalSince(now) <= edge { return true }
         return false
+    }
+
+    /// Whether any block or Block now holds something at `now`: what an emergency relief lifts.
+    static func anythingBlocking(_ state: ArcState, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        state.rules.contains { isBlocking($0, now: now, calendar: calendar) }
+            || (state.session.map { $0.endsAt.timeIntervalSince(now) > edge && $0.startedAt <= now.addingTimeInterval(edge) } ?? false)
     }
 
     static func store(for id: UUID, in state: ArcState) -> ManagedSettingsStore.Name? {

@@ -11,11 +11,12 @@ enum EditorTarget: Identifiable, Hashable {
     }
 }
 
-/// Home: are things locked right now, what's blocking, Lock in, and what starts next.
+/// Home: are things locked right now, what's blocking, emergency relief, Lock in, and what starts next.
 struct HomeTab: View {
     @EnvironmentObject private var model: AppModel
     let openBlockNow: () -> Void
     @State private var showLockIn = false
+    @State private var showRelief = false
     /// A lost block that would start the moment it's restored (asked first, like saving one in the editor).
     @State private var confirmRestore: Rule?
 
@@ -27,7 +28,7 @@ struct HomeTab: View {
                 if !model.missing.isEmpty { missingSection }
                 let blocks = model.blockingNow
                 if !blocks.isEmpty {
-                    Section("Blocking now") {
+                    Section {
                         ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
                             HStack(spacing: 12) {
                                 Image(systemName: b.kind == .timeout ? "cup.and.saucer.fill" : (b.kind == .place ? "mappin.circle.fill" : "lock.fill"))
@@ -41,9 +42,14 @@ struct HomeTab: View {
                             }
                             .font(.p(16, .regular))
                         }
+                    } header: {
+                        Text("Blocking now")
+                    } footer: {
+                        if let until = model.reliefUntil { Text("Lifted by emergency relief until \(Fmt.time(until)).") }
                     }
                     .listRowBackground(Palette.card)
                 }
+                if model.reliefActive || !blocks.isEmpty { reliefSection }
                 Section {
                     Button { showLockIn = true } label: {
                         HStack(spacing: 12) {
@@ -64,7 +70,7 @@ struct HomeTab: View {
                     .buttonStyle(.plain)
                 } footer: {
                     Text(model.lockInActive ? "No rule can be loosened or deleted, and no app can be deleted. You can still add blocks, apps and websites."
-                                            : "Freeze every rule for days. No early exit.")
+                                            : "Freeze every rule for days. It can't be ended early.")
                 }
                 .listRowBackground(Palette.card)
                 if let next = model.nextStart {
@@ -84,6 +90,7 @@ struct HomeTab: View {
             .navigationTitle("Arc Lock")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showLockIn) { LockInSheet().environmentObject(model) }
+            .sheet(isPresented: $showRelief) { ReliefSheet().environmentObject(model) }
             .confirmationDialog(Text(confirmRestore?.plan.kind == .place ? "Restore this place block?" : "This block starts right away"),
                                 isPresented: Binding(get: { confirmRestore != nil }, set: { if !$0 { confirmRestore = nil } }),
                                 titleVisibility: .visible, presenting: confirmRestore) { r in
@@ -103,6 +110,51 @@ struct HomeTab: View {
             .onAppear { if Demo.shot == "lockin" || Demo.shot == "lockin-confirm" { showLockIn = true } }
             #endif
         }
+    }
+
+    /// Emergency relief (AppModel.startRelief): while blocks hold something, once every 30 days, lift them all for
+    /// 30 minutes. While one runs: when the blocks come back. After: when the next one can be used.
+    private var reliefSection: some View {
+        Section {
+            if let until = model.reliefUntil {
+                HStack(spacing: 12) {
+                    Image(systemName: "lifepreserver").foregroundStyle(Palette.brass).frame(width: 22)
+                    Text("Blocks return at \(Fmt.time(until))").foregroundStyle(Palette.ink)
+                    Spacer()
+                    Text(timerInterval: min(model.now, until)...until, countsDown: true)
+                        .monospacedDigit()
+                        .foregroundStyle(Palette.brass)
+                }
+                .font(.p(16, .regular))
+            } else if let next = model.reliefNextAvailable {
+                HStack(spacing: 12) {
+                    Image(systemName: "lifepreserver").foregroundStyle(Palette.muted).frame(width: 22)
+                    Text("Next emergency relief on \(Fmt.dayAndTime(next))").foregroundStyle(Palette.muted)
+                }
+                .font(.p(16, .regular))
+            } else {
+                Button { showRelief = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "lifepreserver").foregroundStyle(Palette.brass).frame(width: 22)
+                        Text("Use emergency relief").foregroundStyle(Palette.ink)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
+                    .font(.p(16, .regular))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        } header: {
+            Text("Emergency relief")
+        } footer: {
+            if model.reliefActive {
+                Text("Your rules and lock-in don't change. Limits and time-outs keep counting.")
+            } else {
+                Text("Once every \(ReliefRules.refillDays) days, lift every block for \(ReliefRules.minutes) minutes.")
+            }
+        }
+        .listRowBackground(Palette.card)
     }
 
     /// Blocks an older version lost after an update (AppModel.missing), each one restorable as it was.
@@ -168,17 +220,23 @@ struct HomeTab: View {
     }
 }
 
-/// The phone-and-lock mark, closed while anything is blocked, with how long until the next unlock.
+/// The phone-and-lock mark, closed while anything is blocked, with how long until the next unlock. During an
+/// emergency relief it's open, with how long until the blocks come back.
 struct StatusHero: View {
     @EnvironmentObject private var model: AppModel
     var body: some View {
         let blocks = model.blockingNow
+        let relief = model.reliefUntil
+        let title: LocalizedStringKey = relief != nil ? "Relief" : (blocks.isEmpty ? "Unlocked" : "Locked")
         VStack(spacing: 10) {
-            ArcMark(size: 84, locked: !blocks.isEmpty)
-            Text(blocks.isEmpty ? "Unlocked" : "Locked")
+            ArcMark(size: 84, locked: relief == nil && !blocks.isEmpty)
+            Text(title)
                 .font(.p(40, .light, .largeTitle))
                 .foregroundStyle(Palette.ink)
-            if let first = blocks.first {
+            if let relief {
+                Text("Blocks return in \(durationText(relief.timeIntervalSince(model.now)))")
+                    .font(.p(15, .medium, .subheadline)).foregroundStyle(Palette.brass)
+            } else if let first = blocks.first {
                 Text(first.until == .distantFuture ? String(localized: "Unlocks when you leave")
                                                    : String(localized: "Next unlock in \(durationText(first.until.timeIntervalSince(model.now)))"))
                     .font(.p(15, .medium, .subheadline)).foregroundStyle(Palette.brass)

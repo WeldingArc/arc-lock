@@ -265,7 +265,7 @@ struct LockInSheet: View {
                     VStack(spacing: 20) {
                         ArcMark(size: 64).padding(.top, 12)
                         Text("Lock in").font(.p(32, .extraLight, .largeTitle)).foregroundStyle(Palette.ink)
-                        Text("For the days you choose, no rule can be loosened, stopped or deleted — you can only add to them — and no app can be deleted. There is no early exit.")
+                        Text("For the days you choose, no rule can be loosened, stopped or deleted (you can only add to them), and no app can be deleted. The lock-in can't be ended early, but emergency relief still works.")
                             .font(.p(15, .regular)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
                         HStack(spacing: 8) {
                             ForEach(choices, id: \.self) { d in

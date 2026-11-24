@@ -314,6 +314,8 @@ final class AppModel: ObservableObject {
         func newlyDue(_ d: Date?) -> Bool { d.map { $0 > previous && $0 <= now } ?? false }
         let switchDue = newlyDue(state.deletionProtectionOffAt) || state.strictUntil.values.contains(where: newlyDue)
             || places.contains { newlyDue(PlaceRules.latestEnd(PlaceVisits.get($0.id), now: previous)) }
+            // an emergency relief's end, a moment early as everywhere (Engine.edge): its shields come back
+            || newlyDue(Relief.until?.addingTimeInterval(-Engine.edge))
         if ended || due || switchDue || (state.lockInUntil.map { $0 <= now } ?? false) { refresh() }
     }
 
@@ -704,8 +706,12 @@ final class AppModel: ObservableObject {
             st.lastSessionMinutes = minutes
         }
         if demo { return .saved }
-        Shielding.apply(selection, domains: domains, to: Names.sessionStore, hold: state.isStrict(session, now: now))
+        Shielding.apply(selection, domains: domains, to: Names.sessionStore, hold: state.isStrict(session, now: now), now: now)
         do { try Monitoring.startSession(session) } catch { problem = Self.describe(error) }
+        // an emergency relief lifts this one too: it covers its apps once the relief is over
+        if Relief.isActive(now: now), let back = Relief.until {
+            toast = String(localized: "Block now starts when emergency relief ends, at \(Fmt.time(back)).")
+        }
         return .saved
     }
 
@@ -724,6 +730,64 @@ final class AppModel: ObservableObject {
             st.session?.selection = merged
             st.lastSessionSelection = merged
         }
+        return .saved
+    }
+
+    // MARK: emergency relief
+
+    /// Whether an emergency relief is lifting every block right now (Shared Relief, Core ReliefRules).
+    var reliefActive: Bool { !demo && Relief.isActive(now: now) }
+    /// When the running relief's blocks come back.
+    var reliefUntil: Date? { reliefActive ? Relief.until : nil }
+    /// When the next relief can be used, while the last one is less than 30 days old (nil: one is waiting).
+    var reliefNextAvailable: Date? {
+        guard !demo, let next = Relief.next, next > now else { return nil }
+        return next
+    }
+    /// When the next relief would come if one were used now.
+    var reliefRefill: Date { ReliefRules.plan(startingAt: now, calendar: calendar).next }
+
+    /// Why an emergency relief can't start now, or nil when it can (asked before the warning and the hold).
+    func reliefRefusal() -> String? {
+        switch ReliefRules.refusal(until: Relief.until, next: Relief.next, anythingBlocked: !blockingNow.isEmpty,
+                                   now: Date(), edge: Engine.edge) {
+        case .running(let until)?:
+            return String(localized: "Emergency relief is already on. Your blocks return at \(Fmt.time(until)).")
+        case .notYet(let next)?:
+            return String(localized: "You've used your emergency relief. The next one is available on \(Fmt.dayAndTime(next)).")
+        case .nothingBlocked?:
+            return String(localized: "Nothing is blocked right now, so there's nothing to lift.")
+        case nil:
+            return nil
+        }
+    }
+
+    /// Lifts every block's shields for 30 minutes, once every 30 days (Core ReliefRules), strict blocks and lock-ins
+    /// included. Rules, limits, the lock-in and every setting stay as they are, and a strict block still stops app
+    /// deletion and manual clock changes. A one-off monitor brings the shields back at the end even if Arc Lock stays
+    /// closed (Monitoring.startRelief); when iOS won't take it, nothing is lifted.
+    func startRelief() -> Outcome {
+        if !demo { now = Date() }
+        if let why = reliefRefusal() { return .refused(why) }
+        if demo { return .saved }
+        let start = Date()
+        let plan = ReliefRules.plan(startingAt: start, calendar: calendar)
+        let before = Relief.saved
+        Relief.begin(start: start, until: plan.until, next: plan.next)
+        do {
+            try Monitoring.startRelief(from: start, until: plan.until)
+        } catch {
+            Relief.restore(before)
+            Engine.reconcile(state)
+            Diag.log("relief monitor FAILED: \(error)")
+            if (error as? DeviceActivityCenter.MonitoringError) == .excessiveActivities {
+                return .refused(String(localized: "iOS is watching as many blocks as it allows, so emergency relief couldn't set its end. Nothing was lifted."))
+            }
+            return .refused(Self.describe(error))
+        }
+        Diag.log("relief until \(plan.until), next \(plan.next)")
+        Engine.reconcile(state, now: start)
+        objectWillChange.send()
         return .saved
     }
 

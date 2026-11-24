@@ -768,6 +768,16 @@
         }
       }
     },
+    "Block now starts when emergency relief ends, at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 차단은 긴급 해제가 끝나는 %@부터 적용됩니다."
+          }
+        }
+      }
+    },
     "Blocked in Safari and every other browser while Block now runs.": {
       "localizations": {
         "ko": {
@@ -856,6 +866,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "차단"
+          }
+        }
+      }
+    },
+    "Blocks lifted": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단이 해제되었습니다"
+          }
+        }
+      }
+    },
+    "Blocks return at %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 차단이 다시 적용됩니다"
+          }
+        }
+      }
+    },
+    "Blocks return in %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 잠기기까지 %@"
           }
         }
       }
@@ -1146,6 +1186,16 @@
         }
       }
     },
+    "Deletion protection and the clock lock stay as they are.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제 방지와 날짜 및 시간 잠금은 그대로 유지됩니다."
+          }
+        }
+      }
+    },
     "Deletion protection turns off at %@.": {
       "localizations": {
         "ko": {
@@ -1206,6 +1256,53 @@
         }
       }
     },
+    "Emergency relief": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제"
+          }
+        }
+      }
+    },
+    "Emergency relief is already on. Your blocks return at %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제가 이미 켜져 있습니다. %@에 차단이 다시 적용됩니다."
+          }
+        }
+      }
+    },
+    "Emergency relief is over": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제가 끝났습니다"
+          }
+        }
+      }
+    },
+    "Emergency relief still works: once every %lld days it lifts your blocks for %lld minutes. The lock-in itself stays on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Emergency relief still works: once every %1$lld days it lifts your blocks for %2$lld minutes. The lock-in itself stays on."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제는 계속 쓸 수 있습니다. %1$lld일마다 한 번 차단을 %2$lld분 동안 해제하며, 규칙 고정은 그대로 유지됩니다."
+          }
+        }
+      }
+    },
     "End break": {
       "localizations": {
         "ko": {
@@ -1242,6 +1339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "종료"
+          }
+        }
+      }
+    },
+    "Every app and website your blocks hold opens, strict blocks and Block now included.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금 차단과 지금 차단을 포함해 차단된 모든 앱과 웹사이트가 열립니다."
           }
         }
       }
@@ -1286,12 +1393,12 @@
         }
       }
     },
-    "For the days you choose, no rule can be loosened, stopped or deleted — you can only add to them — and no app can be deleted. There is no early exit.": {
+    "For the days you choose, no rule can be loosened, stopped or deleted (you can only add to them), and no app can be deleted. The lock-in can't be ended early, but emergency relief still works.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선택한 기간에는 규칙을 완화하거나 중지하거나 삭제할 수 없고(추가만 할 수 있습니다), 앱도 삭제할 수 없습니다. 기간이 끝나기 전에 잠금을 해제할 수 없습니다."
+            "value": "선택한 기간에는 규칙을 완화하거나 중지하거나 삭제할 수 없고(추가만 할 수 있습니다), 앱도 삭제할 수 없습니다. 규칙 고정은 중간에 끝낼 수 없지만 긴급 해제는 계속 쓸 수 있습니다."
           }
         }
       }
@@ -1326,12 +1433,12 @@
         }
       }
     },
-    "Freeze every rule for days. No early exit.": {
+    "Freeze every rule for days. It can't be ended early.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "며칠 동안 모든 규칙을 고정합니다. 중간에 해제할 수 없습니다."
+            "value": "며칠 동안 모든 규칙을 고정합니다. 중간에 끝낼 수 없습니다."
           }
         }
       }
@@ -1416,6 +1523,16 @@
         }
       }
     },
+    "If you use it now, the next one is available on %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 사용하면 다음 긴급 해제는 %@부터 쓸 수 있습니다."
+          }
+        }
+      }
+    },
     "In a real emergency your friend can always give you the code. That's the point: a pause long enough for the urge to pass.": {
       "localizations": {
         "ko": {
@@ -1432,6 +1549,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "버튼이 채워지는 동안 진동이 점점 강해집니다. 마지막에 강한 진동이 오면 규칙이 고정된 것입니다."
+          }
+        }
+      }
+    },
+    "It buzzes as it fills. One strong buzz means your blocks are lifted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버튼이 채워지는 동안 진동이 점점 강해집니다. 마지막에 강한 진동이 오면 차단이 해제된 것입니다."
+          }
+        }
+      }
+    },
+    "It can't be ended early. It ends on its own after %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "중간에 끝낼 수 없습니다. %@까지 이어진 뒤 자동으로 끝납니다."
           }
         }
       }
@@ -1583,6 +1720,52 @@
           "stringUnit": {
             "state": "translated",
             "value": "도서관, 학교, 헬스장…"
+          }
+        }
+      }
+    },
+    "Lift every block for %lld minutes, strict blocks and lock-ins included. You get one every %lld days.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Lift every block for %1$lld minutes, strict blocks and lock-ins included. You get one every %2$lld days."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강제 잠금 차단과 규칙 고정 중에도 모든 차단을 %1$lld분 동안 해제합니다. %2$lld일마다 한 번 쓸 수 있습니다."
+          }
+        }
+      }
+    },
+    "Lift my blocks": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단 해제하기"
+          }
+        }
+      }
+    },
+    "Lift your blocks?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단을 해제할까요?"
+          }
+        }
+      }
+    },
+    "Lifted by emergency relief until %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제로 %@까지 해제되었습니다."
           }
         }
       }
@@ -1870,6 +2053,16 @@
         }
       }
     },
+    "Next emergency relief on %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 긴급 해제: %@"
+          }
+        }
+      }
+    },
     "Next unlock in %@": {
       "localizations": {
         "ko": {
@@ -1990,6 +2183,16 @@
         }
       }
     },
+    "Nothing is blocked right now, so there's nothing to lift.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 차단 중인 것이 없어 해제할 것이 없습니다."
+          }
+        }
+      }
+    },
     "Nothing is blocked yet.": {
       "localizations": {
         "ko": {
@@ -2036,6 +2239,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "꺼짐: 차단을 언제든 중지하거나 변경할 수 있습니다. 다만 강제 잠금을 끌 때 실행 중이거나 사용 시간을 계산 중인 차단은 각각 초기화되거나 끝날 때까지 강제 잠금이 유지됩니다. 규칙 고정을 사용하려면 강제 잠금을 켜야 합니다."
+          }
+        }
+      }
+    },
+    "Once every %lld days, lift every block for %lld minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Once every %1$lld days, lift every block for %2$lld minutes."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld일마다 한 번, 모든 차단을 %2$lld분 동안 해제할 수 있습니다."
           }
         }
       }
@@ -2221,12 +2440,32 @@
         }
       }
     },
+    "RELIEF": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해제"
+          }
+        }
+      }
+    },
     "Recovery goes to your friend": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "복구용 계정은 친구가 관리합니다"
+          }
+        }
+      }
+    },
+    "Relief": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제 중"
           }
         }
       }
@@ -2852,16 +3091,6 @@
         }
       }
     },
-    "There's no early exit. It ends on its own after %@.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "중간에 해제할 수 없습니다. %@까지 이어진 뒤 자동으로 끝납니다."
-          }
-        }
-      }
-    },
     "These blocks were saved before an update, but they're not in your list anymore. If you didn't delete them yourself, restore them here.": {
       "localizations": {
         "ko": {
@@ -3041,6 +3270,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "이 한도를 모두 사용했습니다. %@까지 변경할 수 없습니다."
+          }
+        }
+      }
+    },
+    "This limit is used up. It locks when emergency relief ends, at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 한도를 모두 사용했습니다. 긴급 해제가 끝나는 %@에 잠깁니다."
           }
         }
       }
@@ -3298,6 +3538,16 @@
         }
       }
     },
+    "Use emergency relief": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제 사용"
+          }
+        }
+      }
+    },
     "Use my location": {
       "localizations": {
         "ko": {
@@ -3528,6 +3778,22 @@
         }
       }
     },
+    "You get one every %lld days. The next one is available on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "You get one every %1$lld days. The next one is available on %2$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld일마다 한 번 쓸 수 있습니다. 다음 긴급 해제는 %2$@부터 쓸 수 있습니다."
+          }
+        }
+      }
+    },
     "You're locked in through %@. This setting can't be changed until then.": {
       "localizations": {
         "ko": {
@@ -3578,12 +3844,73 @@
         }
       }
     },
+    "You've used your emergency relief. The next one is available on %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "긴급 해제를 이미 사용했습니다. 다음 긴급 해제는 %@부터 쓸 수 있습니다."
+          }
+        }
+      }
+    },
+    "Your blocks are back on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "차단이 다시 적용되었습니다."
+          }
+        }
+      }
+    },
+    "Your blocks come back on their own after %lld minutes, even if Arc Lock stays closed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arc Lock을 열지 않아도 %lld분 뒤에 차단이 자동으로 다시 적용됩니다."
+          }
+        }
+      }
+    },
+    "Your blocks lift as soon as you confirm and come back after %lld minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인하는 즉시 차단이 해제되고 %lld분 뒤에 다시 적용됩니다."
+          }
+        }
+      }
+    },
     "Your changes start at %@": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "변경 사항은 %@부터 적용됩니다"
+          }
+        }
+      }
+    },
+    "Your rules and lock-in don't change. Limits and time-outs keep counting.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙과 규칙 고정은 바뀌지 않습니다. 일일 한도와 타임아웃은 계속 사용 시간을 계산합니다."
+          }
+        }
+      }
+    },
+    "Your rules, limits and lock-in don't change. Limits and time-outs keep counting, and a limit used up now locks when relief ends.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙, 한도, 규칙 고정은 바뀌지 않습니다. 일일 한도와 타임아웃은 계속 사용 시간을 계산하며, 이 동안 다 쓴 한도는 긴급 해제가 끝나면 잠깁니다."
           }
         }
       }
@@ -3604,6 +3931,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "iOS가 이 장소를 확인하지 못해 도착해도 이 차단이 시작되지 않습니다. Arc Lock을 열 때마다 다시 시도합니다."
+          }
+        }
+      }
+    },
+    "iOS is watching as many blocks as it allows, so emergency relief couldn't set its end. Nothing was lifted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS에서 감시할 수 있는 차단 수가 가득 차서 긴급 해제가 끝나는 시간을 설정하지 못했습니다. 아무것도 해제되지 않았습니다."
           }
         }
       }
